@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-labelledby="title desc">
+<title id="title">ArchaeoHub: Archaeological Knowledge Workspace</title><desc id="desc">Layered geological contours and evidence markers in a refined academic technology palette.</desc>
+<defs>
+  <linearGradient id="ground" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#F7F3E9"/><stop offset="1" stop-color="#EEE5D5"/></linearGradient>
+  <pattern id="grid" width="38" height="38" patternUnits="userSpaceOnUse"><path d="M 38 0 L 0 0 0 38" fill="none" stroke="#8A9D9D" stroke-width="0.65" opacity="0.11"/></pattern>
+  <clipPath id="panel"><rect width="1280" height="360" rx="18"/></clipPath>
+</defs>
+<g clip-path="url(#panel)">
+  <rect width="1280" height="360" fill="url(#ground)"/>
+  <rect width="1280" height="360" fill="url(#grid)"/>
+  <g fill="none" stroke="#BA9D7D" opacity="0.34" stroke-width="1.25"><path d="M 640 285 C 780 120, 1020 425, 1320 90" />
+<path d="M 653 293 C 792 108, 1029 395, 1329 107" />
+<path d="M 666 301 C 804 96, 1038 365, 1338 124" />
+<path d="M 679 309 C 816 84, 1047 335, 1347 141" />
+<path d="M 692 317 C 828 72, 1056 305, 1356 158" />
+<path d="M 705 325 C 840 60, 1065 275, 1365 175" />
+<path d="M 718 333 C 852 48, 1074 245, 1374 192" />
+<path d="M 731 341 C 864 36, 1083 215, 1383 209" />
+<path d="M 744 349 C 876 24, 1092 185, 1392 226" />
+<path d="M 757 357 C 888 12, 1101 155, 1401 243" />
+<path d="M 770 365 C 900 0, 1110 125, 1410 260" />
+<path d="M 783 373 C 912 -12, 1119 95, 1419 277" />
+<path d="M 796 381 C 924 -24, 1128 65, 1428 294" /></g>
+  <g fill="none" stroke="#BA9D7D" opacity="0.25">
+    <circle cx="1080" cy="184" r="155" stroke-width="1"/>
+    <circle cx="1080" cy="184" r="116" stroke-width="1"/>
+    <circle cx="1080" cy="184" r="77" stroke-width="1"/>
+    <path d="M1080 21 V342 M904 184 H1254" stroke-dasharray="5 8" stroke-width="1"/>
+  </g>
+  <circle cx="1045" cy="107" r="5" fill="#986537" opacity="0.9" />
+<circle cx="1140" cy="160" r="4" fill="#986537" opacity="0.65" />
+<circle cx="1050" cy="250" r="3" fill="#986537" opacity="0.4" />
+<circle cx="1218" cy="70" r="4" fill="#986537" opacity="0.5" />
+<circle cx="1187" cy="282" r="5" fill="#986537" opacity="0.7" />
+  <rect x="67" y="69" width="112" height="112" rx="21" fill="#F1E8D9" stroke="#986537" stroke-opacity="0.65" stroke-width="1.4"/>
+  <g transform="translate(88 91)" fill="none" stroke="#986537" stroke-linejoin="round" stroke-linecap="round" stroke-width="6">
+    <path d="M10 18 L35 4 L60 18 L60 45 L35 59 L10 45 Z" opacity="0.93"/>
+    <path d="M13 30 L35 43 L57 30" opacity="0.92"/>
+    <path d="M13 43 L35 56 L57 43" opacity="0.52"/>
+    <circle cx="35" cy="30" r="5" fill="#986537" stroke="none"/>
+  </g>
+  <text x="213" y="99" fill="#986537" font-family="Arial, Helvetica, sans-serif" font-size="15" letter-spacing="5.2" font-weight="700">DIGITAL HUMANITIES / RESEARCH SOFTWARE</text>
+  <text x="207" y="182" fill="#24323A" font-family="Arial, Helvetica, sans-serif" font-size="81" font-weight="800" letter-spacing="-2.5">ArchaeoHub</text>
+  <rect x="213" y="202" width="48" height="3" rx="1.5" fill="#986537"/>
+  <text x="277" y="210" fill="#607078" font-family="Arial, Helvetica, sans-serif" font-size="22" letter-spacing="0.2">Traceable knowledge, grounded in evidence.</text>
+  <text x="213" y="272" fill="#986537" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" letter-spacing="2.4">01 INGEST</text>
+  <text x="326" y="272" fill="#607078" font-family="Arial, Helvetica, sans-serif" font-size="14">/</text>
+  <text x="349" y="272" fill="#986537" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" letter-spacing="2.4">02 RECONSTRUCT</text>
+  <text x="526" y="272" fill="#607078" font-family="Arial, Helvetica, sans-serif" font-size="14">/</text>
+  <text x="549" y="272" fill="#986537" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" letter-spacing="2.4">03 TRACE</text>
+  <text x="668" y="272" fill="#607078" font-family="Arial, Helvetica, sans-serif" font-size="14">/</text>
+  <text x="692" y="272" fill="#986537" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" letter-spacing="2.4">04 REVIEW</text>
+  <path d="M65 316 H1218" stroke="#BA9D7D" stroke-opacity=".28" stroke-width="1"/>
+  <text x="66" y="337" fill="#607078" font-family="Arial, Helvetica, sans-serif" font-size="10" letter-spacing="2.7">ARCHAEOLOGICAL REPORT INTELLIGENCE</text>
+  <text x="1218" y="337" text-anchor="end" fill="#607078" font-family="Arial, Helvetica, sans-serif" font-size="11" letter-spacing="1.1">SOURCE / PAGE / REGION / REVISION</text>
+</g>
+</svg>
