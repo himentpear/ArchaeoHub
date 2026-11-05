@@ -30,7 +30,7 @@ FIGURE_CITATION_PATTERN = re.compile(
 
 # Regex for protected archaeological identifiers (including 景德镇落马桥遗址 formats like T3扩G3∶310, T19③c∶328)
 PROTECTED_ARCH_ID_PATTERN = re.compile(
-    r"(?P<ARTIFACT_ID>[THYMJGFCQ]\d+(?:[扩采a-zA-Z0-9①②③④⑤⑥⑦⑧⑨⑩]+)*[:：∶]\d+(?:-\d+)?)"
+    r"(?P<ARTIFACT_ID>[THYMJGFCQ]\d+(?:[扩采a-zA-Z0-9①②③④⑤⑥⑦⑧⑨⑩]+)*[:：∶︰]\d+(?:-\d+)?)"
     r"|(?P<EXCAVATION_UNIT>\b(?:[IVXⅠⅡⅢⅣⅤ]+)?[THYMJGFCQ]\d+(?:[扩采a-zA-Z0-9①②③④⑤⑥⑦⑧⑨⑩]+)*\b)"
     r"|(?P<MEASUREMENT>\d+(?:\.\d+)?\s*(?:cm|mm|m|厘米|毫米|米))"
 )
