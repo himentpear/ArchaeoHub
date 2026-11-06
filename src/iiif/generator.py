@@ -32,7 +32,7 @@ class IiifBuilder:
     def canvas_uri(self, manifest_id: str, canvas_id: str) -> str:
         return f"{self.base_url}/manifest/{manifest_id}/canvas/{canvas_id}"
 
-    def build_manifest(self, manifest_id: str) -> dict[str, Any]:
+    def build_manifest(self, manifest_id: str, toc_source: str = "auto") -> dict[str, Any]:
         """Build a complete IIIF Presentation 3.0 Manifest including Canvases and Range TOC."""
         manifest = self.session.get(Manifest, manifest_id)
         if manifest is None:
@@ -45,6 +45,14 @@ class IiifBuilder:
 
         top_ranges = [r for r in manifest.ranges if r.parent_id is None]
         structures = [self._build_range_dict(manifest.id, r) for r in top_ranges]
+        from src.toc_structure import toc_view
+        toc = toc_view(self.session, manifest_id, source=toc_source)
+        toc_run = toc.get("run")
+        using_local_toc = bool(toc_run and toc_run.get("source_current")
+                               and toc_run.get("status") in {"completed", "completed_with_review"}
+                               and any(item.get("source_method") == "local_model" for item in toc["items"]))
+        if using_local_toc:
+            structures = self._build_proposed_ranges(manifest_id, toc["items"])
 
         manifest_doc: dict[str, Any] = {
             "@context": IIIF_PRESENTATION_3_CONTEXT,
@@ -65,8 +73,41 @@ class IiifBuilder:
             )
         if structures:
             manifest_doc["structures"] = structures
+        if using_local_toc:
+            manifest_doc["metadata"].append({
+                "label": {"zh-CN": ["目录结构来源"]},
+                "value": {"zh-CN": [
+                    f"本地模型候选 待人工核验 已审查{toc_run['processed']}/{toc_run['total']}项"
+                ]},
+            })
 
         return manifest_doc
+
+    def _build_proposed_ranges(self, manifest_id, items):
+        """Same validated parent edges/order as the API; original ranges remain."""
+        nodes, roots = {}, []
+        for item in items:
+            target = self.canvas_uri(manifest_id, item["canvas_id"])
+            if item.get("xywh"):
+                target += "#xywh=" + item["xywh"]
+            node = {
+                "id": f"{self.base_url}/manifest/{manifest_id}/range/{item['id']}",
+                "type": "Range", "label": {"zh-CN": [item["title"]]},
+                "items": [{"id": target, "type": "Canvas"}],
+            }
+            if item.get("source_method") == "local_model":
+                node["metadata"] = [{
+                    "label": {"zh-CN": ["审查状态"]}, "value": {"zh-CN": ["本地模型候选 待人工核验"]},
+                }]
+            nodes[item["id"]] = node
+            parent = item.get("parent_id")
+            if parent:
+                if parent not in nodes:
+                    raise ValueError("TOC parent must precede its child")
+                nodes[parent]["items"].append(node)
+            else:
+                roots.append(node)
+        return roots
 
     def _build_canvas_dict(self, manifest_id: str, canvas: Canvas) -> dict[str, Any]:
         c_uri = self.canvas_uri(manifest_id, canvas.id)

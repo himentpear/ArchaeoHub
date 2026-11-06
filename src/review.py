@@ -108,6 +108,8 @@ def resolve_review(session, task_id: str, *, actor: str, note: str, status: str,
 
 
 def _reindex_block(session,block,canvas):
+    from src.toc_structure import invalidate_toc_runs
+    invalidate_toc_runs(session, canvas.manifest_id)
     from src.artifact_attributes import invalidate_candidates
     invalidate_candidates(session, block.id)
     from sqlalchemy import delete

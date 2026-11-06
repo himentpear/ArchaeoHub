@@ -20,6 +20,8 @@ def load_settings(path: Path | None = None) -> dict:
     # Explicit process environment overrides file settings.
     for key in ["DEEPSEEK_API_KEY","DEEPSEEK_BASE_URL","DEEPSEEK_MODEL","ALLOW_CLOUD_FALLBACK",
                 "MAX_CLOUD_CALLS_PER_DOCUMENT","MAX_CLOUD_TOKENS_PER_DOCUMENT","LOCAL_MODEL_PATH",
-                "LOCAL_MODEL_THREADS","MAX_LOCAL_BLOCKS_PER_DOCUMENT"]:
+                "LOCAL_MODEL_THREADS","MAX_LOCAL_BLOCKS_PER_DOCUMENT",
+                "LOCAL_TOC_ENABLED","LOCAL_TOC_MODEL_PATH","MAX_LOCAL_TOC_NODES",
+                "LOCAL_TOC_BATCH_SIZE","MAX_LOCAL_TOC_BATCHES","LOCAL_TOC_BATCH_TIMEOUT"]:
         if key in os.environ:values[key]=os.environ[key]
     return values

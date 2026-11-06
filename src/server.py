@@ -46,6 +46,36 @@ def _norm_text(text: str | None) -> str:
     return s
 
 
+def _structure_toc_items(doc: dict, view: dict) -> list[dict]:
+    """Decorate a parent-first core view without re-filtering model decisions."""
+    raw = view["items"]
+    by_id = {item["id"]: item for item in raw}
+    accepted = []
+    for item in raw:
+        rule_item = item.get("source_method", "auto_heading") == "auto_heading"
+        if rule_item and not validate_heading_title(item["title"], item["level"])[0]:
+            continue
+        title = re.sub(r"\u3000+", " ", (item["title"] or "").strip())
+        accepted.append({
+            **item, "manifest_id": doc["id"], "work_title": doc["title"],
+            "short_title": doc["short_title"], "title": title,
+            "source_method": item.get("source_method", "auto_heading"),
+            "review_status": item.get("review_status", "baseline"),
+            "_norm": _norm_text(f"{doc['title']} {title}"),
+        })
+    included = {item["id"] for item in accepted}
+    for item in accepted:
+        parent, seen = item.get("parent_id"), set()
+        while parent is not None and parent not in included:
+            if parent in seen or parent not in by_id:
+                parent = None
+                break
+            seen.add(parent)
+            parent = by_id[parent].get("parent_id")
+        item["parent_id"] = parent
+    return accepted
+
+
 def _norm_tokens(query: str) -> list[str]:
     q = _norm_text(query)
     return [t for t in q.split(" ") if t]
@@ -288,7 +318,7 @@ def _compute_plate_subfigures(
     return plate_title, sub_figs
 
 
-def _build_index_cache(engine) -> dict:
+def _build_index_cache(engine, toc_source: str = "auto") -> dict:
     """Build an in-memory multi-volume index of documents, TOC, figures, gallery tree, and cross-volume artifacts."""
     with get_session(engine) as session:
         doc_rows = session.execute(
@@ -655,44 +685,22 @@ def _build_index_cache(engine) -> dict:
 
         # 6. Build Complete Multi-Volume TOC (covering Vol 1-2 chapters AND Vol 3-5 plates)
         toc_all = []
-        raw_ranges = session.execute(
-            select(IiifRange)
-            .order_by(IiifRange.manifest_id, IiifRange.sort_order, IiifRange.level)
-        ).all()
-        ranges_by_manifest = defaultdict(list)
-        for (r,) in raw_ranges:
-            ranges_by_manifest[r.manifest_id].append(r)
+        toc_runs = {}
+        from src.toc_structure import toc_view
 
         for doc in documents:
             mid = doc["id"]
-            m_ranges = ranges_by_manifest.get(mid, [])
-            has_high_level_toc = any(r.level <= 3 for r in m_ranges)
+            structure = toc_view(session, mid, source=toc_source)
+            toc_runs[mid] = structure.get("run")
+            structure_items = _structure_toc_items(doc, structure)
+            has_high_level_toc = any(
+                (item["level"] if item.get("source_method", "").startswith("local_model")
+                 else item.get("rule_level", item["level"])) <= 3
+                for item in structure_items
+            )
 
             if has_high_level_toc:
-                for r in m_ranges:
-                    ok, _ = validate_heading_title(r.title, r.level)
-                    if not ok:
-                        continue
-                    c_info = canvases_by_id.get(r.start_canvas_id)
-                    clean_title = re.sub(r"\u3000+", " ", (r.title or "").strip())
-                    toc_all.append(
-                        {
-                            "id": r.id,
-                            "manifest_id": mid,
-                            "work_title": doc["title"],
-                            "short_title": doc["short_title"],
-                            "level": r.level,
-                            "title": clean_title,
-                            "section_number": r.section_number,
-                            "canvas_id": c_info["id"] if c_info else None,
-                            "scan_index": c_info["scan_index"] if c_info else None,
-                            "printed_page": (
-                                c_info["printed_page"] if c_info else r.start_label
-                            ),
-                            "xywh": r.start_xywh,
-                            "_norm": _norm_text(f"{doc['title']} {clean_title}"),
-                        }
-                    )
+                toc_all.extend(structure_items)
             else:
                 plate_items = plate_toc_by_manifest.get(mid, [])
                 plate_items.sort(key=lambda pair: pair[0]["scan_index"])
@@ -711,6 +719,7 @@ def _build_index_cache(engine) -> dict:
                         toc_all.append(
                             {
                                 "id": f"plate_group_{mid}_{prefix}",
+                                "parent_id": None,
                                 "manifest_id": mid,
                                 "work_title": doc["title"],
                                 "short_title": doc["short_title"],
@@ -721,6 +730,8 @@ def _build_index_cache(engine) -> dict:
                                 "scan_index": fig_obj["scan_index"],
                                 "printed_page": fig_obj["printed_page"],
                                 "xywh": fig_obj["xywh"],
+                                "source_method": "figure_index",
+                                "review_status": "baseline",
                                 "_norm": _norm_text(
                                     f"{doc['title']} {prefix} {sec_desc}"
                                 ),
@@ -731,6 +742,7 @@ def _build_index_cache(engine) -> dict:
                     toc_all.append(
                         {
                             "id": f"plate_toc_{fig_obj['id']}",
+                            "parent_id": f"plate_group_{mid}_{prefix}",
                             "manifest_id": mid,
                             "work_title": doc["title"],
                             "short_title": doc["short_title"],
@@ -741,6 +753,8 @@ def _build_index_cache(engine) -> dict:
                             "scan_index": fig_obj["scan_index"],
                             "printed_page": fig_obj["printed_page"],
                             "xywh": fig_obj["xywh"],
+                            "source_method": "figure_index",
+                            "review_status": "baseline",
                             "_norm": fig_obj["_norm"],
                         }
                     )
@@ -748,6 +762,7 @@ def _build_index_cache(engine) -> dict:
                         toc_all.append(
                             {
                                 "id": sf["id"],
+                                "parent_id": f"plate_toc_{fig_obj['id']}",
                                 "manifest_id": mid,
                                 "work_title": doc["title"],
                                 "short_title": doc["short_title"],
@@ -758,6 +773,8 @@ def _build_index_cache(engine) -> dict:
                                 "scan_index": sf["scan_index"],
                                 "printed_page": sf["printed_page"],
                                 "xywh": sf["xywh"],
+                                "source_method": "figure_index",
+                                "review_status": "baseline",
                                 "_norm": sf["_norm"],
                             }
                         )
@@ -955,6 +972,7 @@ def _build_index_cache(engine) -> dict:
             "manifest_meta": manifest_meta,
             "canvases_by_id": canvases_by_id,
             "toc": toc_all,
+            "toc_structure_runs": toc_runs,
             "figures": figures,
             "sub_figures_flat": sub_figures_flat,
             "figures_by_canvas": figures_by_canvas,
@@ -976,19 +994,27 @@ def make_server(library: Path, host: str = "127.0.0.1", port: int = 8000, source
     engine = init_db("sqlite:///" + (library / "library.db").as_posix())
     base_url = f"http://127.0.0.1:{port}/iiif"
     cache_lock = threading.Lock()
-    index_cache: dict | None = None
+    index_cache: dict[str, dict] = {}
+    index_cache_token = None
 
-    def get_index() -> dict:
-        nonlocal index_cache
+    def get_index(toc_source: str = "auto") -> dict:
+        nonlocal index_cache_token
+        from src.toc_models import TocStructureRun
+        with get_session(engine) as session:
+            token = tuple(session.execute(select(
+                TocStructureRun.id, TocStructureRun.status
+            ).order_by(TocStructureRun.id)).all())
         with cache_lock:
-            if index_cache is None:
-                index_cache = _build_index_cache(engine)
-            return index_cache
+            if token != index_cache_token:
+                index_cache.clear()
+                index_cache_token = token
+            if toc_source not in index_cache:
+                index_cache[toc_source] = _build_index_cache(engine, toc_source=toc_source)
+            return index_cache[toc_source]
 
     def invalidate_index():
-        nonlocal index_cache
         with cache_lock:
-            index_cache = None
+            index_cache.clear()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -1025,6 +1051,18 @@ def make_server(library: Path, host: str = "127.0.0.1", port: int = 8000, source
                 )
             if path == "/health":
                 return self.send({"status": "ok", "database": engine.dialect.name})
+            if path == "/api/toc_structure":
+                from src.toc_structure import toc_view
+                source = query.get("source", ["auto"])[0]
+                if source not in {"auto", "rules", "local_model"}:
+                    raise ValueError("Supported TOC sources: auto, rules, local_model")
+                manifest_id = query.get("manifest", [""])[0]
+                if not manifest_id or manifest_id == "all":
+                    raise ValueError("Select one manifest for structure review")
+                with get_session(engine) as session:
+                    if session.get(Manifest, manifest_id) is None:
+                        raise LookupError("Manifest not found")
+                    return self.send(toc_view(session, manifest_id, source=source))
             if path == "/api/artifact":
                 from src.artifact_attributes import artifact_detail
                 with get_session(engine) as session:
@@ -1056,7 +1094,12 @@ def make_server(library: Path, host: str = "127.0.0.1", port: int = 8000, source
                     if format=='xlsx':return self.send(render_xlsx(detail),mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
                     raise ValueError('Supported graphic exports: json, html, xlsx')
 
-            idx = get_index()
+            toc_source = query.get("source", ["auto"])[0] if path == "/api/toc" else "auto"
+            if toc_source not in {"auto", "rules", "local_model"}:
+                raise ValueError("Supported TOC sources: auto, rules, local_model")
+            if path == "/api/toc" and query.get("refresh", ["0"])[0] in {"1", "true"}:
+                invalidate_index()
+            idx = get_index(toc_source)
 
             with get_session(engine) as session:
                 builder = IiifBuilder(session, base_url)

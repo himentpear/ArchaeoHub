@@ -1,0 +1,236 @@
+{
+  "summary": {
+    "id": "fddf96c4-639d-4395-a0a8-8d94da1d55cc",
+    "status": "completed_with_review",
+    "model": "Qwen3-4B-Q4_K_M.gguf",
+    "model_identity": {
+      "name": "Qwen3-4B-Q4_K_M.gguf",
+      "sha256": "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
+      "size": 2497280256
+    },
+    "source_digest": "b292a6c264ebad236bae741dc129b0ab4b8d381c387d7744356f8d367ef8dc02",
+    "total": 909,
+    "eligible": 115,
+    "selected": 24,
+    "processed": 8,
+    "changes": 0,
+    "excluded": 0,
+    "added": 0,
+    "reparented": 0,
+    "batches": 2,
+    "cache_hits": 0,
+    "errors": [
+      {
+        "batch": 1,
+        "node_ids": [
+          "n00555",
+          "n00556",
+          "n00557",
+          "n00558"
+        ],
+        "error_type": "ValueError"
+      },
+      {
+        "batch": 2,
+        "node_ids": [
+          "n00559",
+          "n00564",
+          "n00572",
+          "n00573"
+        ],
+        "error_type": "ValueError"
+      },
+      {
+        "batch": 3,
+        "node_ids": [
+          "n00583",
+          "n00608",
+          "n00609",
+          "n00610"
+        ],
+        "error_type": "ValueError"
+      },
+      {
+        "batch": 4,
+        "node_ids": [
+          "n00612",
+          "n00613",
+          "n00622",
+          "n00623"
+        ],
+        "error_type": "ValueError"
+      }
+    ],
+    "cloud_calls": 0,
+    "scope": {
+      "start_scan": 59,
+      "end_scan": 125
+    },
+    "review_status": "pending",
+    "config": {
+      "version": "local-toc-v1",
+      "max_nodes": 24,
+      "batch_size": 4,
+      "max_batches": 6,
+      "start_scan": 59,
+      "end_scan": 125
+    },
+    "remaining": 901,
+    "elapsed_seconds": 42.855,
+    "backup": "D:\\Documents\\Github\\PKU-LM-Humanities-Data-Lab\\data\\processed\\library\\backups\\before-local-toc-1793972067811402500.db"
+  },
+  "review": {
+    "id": "fddf96c4-639d-4395-a0a8-8d94da1d55cc",
+    "status": "completed_with_review",
+    "model": "Qwen3-4B-Q4_K_M.gguf",
+    "model_identity": {
+      "name": "Qwen3-4B-Q4_K_M.gguf",
+      "sha256": "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
+      "size": 2497280256
+    },
+    "source_digest": "b292a6c264ebad236bae741dc129b0ab4b8d381c387d7744356f8d367ef8dc02",
+    "total": 909,
+    "eligible": 115,
+    "selected": 24,
+    "processed": 8,
+    "changes": 0,
+    "excluded": 0,
+    "added": 0,
+    "reparented": 0,
+    "batches": 2,
+    "cache_hits": 0,
+    "errors": [
+      {
+        "batch": 1,
+        "node_ids": [
+          "n00555",
+          "n00556",
+          "n00557",
+          "n00558"
+        ],
+        "error_type": "ValueError"
+      },
+      {
+        "batch": 2,
+        "node_ids": [
+          "n00559",
+          "n00564",
+          "n00572",
+          "n00573"
+        ],
+        "error_type": "ValueError"
+      },
+      {
+        "batch": 3,
+        "node_ids": [
+          "n00583",
+          "n00608",
+          "n00609",
+          "n00610"
+        ],
+        "error_type": "ValueError"
+      },
+      {
+        "batch": 4,
+        "node_ids": [
+          "n00612",
+          "n00613",
+          "n00622",
+          "n00623"
+        ],
+        "error_type": "ValueError"
+      }
+    ],
+    "cloud_calls": 0,
+    "scope": {
+      "start_scan": 59,
+      "end_scan": 125
+    },
+    "review_status": "pending",
+    "config": {
+      "version": "local-toc-v1",
+      "max_nodes": 24,
+      "batch_size": 4,
+      "max_batches": 6,
+      "start_scan": 59,
+      "end_scan": 125
+    },
+    "remaining": 901,
+    "elapsed_seconds": 42.855,
+    "source_current": true,
+    "suggestions": [
+      {
+        "title": "第一节　房　　址",
+        "scan_index": 93,
+        "keep": true,
+        "level": 3,
+        "parent_id": "n00623",
+        "reason": "直接父节点为n00623，且标题真实",
+        "evidence": "第一节　房　　址"
+      },
+      {
+        "title": "第二节　墙",
+        "scan_index": 96,
+        "keep": true,
+        "level": 3,
+        "parent_id": "n00623",
+        "reason": "直接父节点为n00623，且标题真实",
+        "evidence": "第二节　墙"
+      },
+      {
+        "title": "第三节　池　　子",
+        "scan_index": 99,
+        "keep": true,
+        "level": 3,
+        "parent_id": "n00623",
+        "reason": "直接父节点为n00623，且标题真实",
+        "evidence": "第三节　池　　子"
+      },
+      {
+        "title": "第四节　路",
+        "scan_index": 99,
+        "keep": true,
+        "level": 3,
+        "parent_id": "n00623",
+        "reason": "直接父节点为n00623，且标题真实",
+        "evidence": "第四节　路"
+      },
+      {
+        "title": "第五节　灰　　坑",
+        "scan_index": 100,
+        "keep": true,
+        "level": 3,
+        "parent_id": "n00623",
+        "reason": "章节标题直接延续前一节",
+        "evidence": "第五节　灰　　坑"
+      },
+      {
+        "title": "第六节　 沟",
+        "scan_index": 106,
+        "keep": true,
+        "level": 3,
+        "parent_id": "n00623",
+        "reason": "章节标题直接延续前一节",
+        "evidence": "第六节　 沟"
+      },
+      {
+        "title": "第二章　宋元时期遗物",
+        "scan_index": 107,
+        "keep": true,
+        "level": 2,
+        "parent_id": "n00622",
+        "reason": "章节标题直接延续前一章",
+        "evidence": "第二章　宋元时期遗物"
+      },
+      {
+        "title": "第一节　普 通 陶 瓷",
+        "scan_index": 107,
+        "keep": true,
+        "level": 3,
+        "parent_id": "n00656",
+        "reason": "章节标题直接延续前一节",
+        "evidence": "第一节　普 通 陶 瓷"
+      }
+    ]
+  }
+}

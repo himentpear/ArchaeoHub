@@ -97,6 +97,9 @@ def run_document(pdf: Path, output: Path, *, max_pages: int | None = None,
                 from src.artifact_attributes import enrich_artifact_attributes
                 with get_session(engine) as session:
                     state["artifact_stage"] = enrich_artifact_attributes(session, existing_id, base_url=base_url)
+                from src.toc_structure import run_local_toc_review
+                state["toc_stage"] = {"status": "skipped"} if skip_models else run_local_toc_review(
+                    engine, existing_id, run_dir, settings_path=settings_path)
                 from src.model_enrichment import enrich_with_models
                 state["model_stage"]={"status":"skipped"} if skip_models else enrich_with_models(engine,existing_id,run_dir,base_url,settings_path)
                 with get_session(engine) as session:
@@ -158,6 +161,9 @@ def run_document(pdf: Path, output: Path, *, max_pages: int | None = None,
             state["status"] = "exporting"
             state["stats"] = stats
             atomic_json(state_file, state)
+            from src.toc_structure import run_local_toc_review
+            state["toc_stage"] = {"status": "skipped"} if skip_models else run_local_toc_review(
+                engine, stats["manifest_id"], run_dir, settings_path=settings_path)
             from src.model_enrichment import enrich_with_models
             state["model_stage"] = {"status":"skipped"} if skip_models else enrich_with_models(engine,stats["manifest_id"],run_dir,base_url,settings_path)
             with get_session(engine) as session:
@@ -174,11 +180,14 @@ def run_document(pdf: Path, output: Path, *, max_pages: int | None = None,
 
 
 def _export(session, manifest_id: str, run_dir: Path, base_url: str):
+    from src.toc_structure import export_toc_structure
+    export_toc_structure(session, manifest_id, run_dir)
     from src.artifact_attributes import export_attributes
     export_attributes(session, manifest_id, run_dir)
     from src.alto.exporter import export_canvas
     builder = IiifBuilder(session, base_url)
     atomic_json(run_dir / "manifest.json", builder.build_manifest(manifest_id))
+    atomic_json(run_dir / "toc_model_manifest.json", builder.build_manifest(manifest_id, toc_source="local_model"))
     canvases = list(session.scalars(select(Canvas).where(Canvas.manifest_id == manifest_id).order_by(Canvas.scan_index)))
     for canvas in canvases:
         atomic_json(run_dir / "bundles" / f"{canvas.scan_index:05d}.json", builder.build_page_bundle(canvas.id))

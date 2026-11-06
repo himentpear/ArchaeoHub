@@ -1282,6 +1282,15 @@
               <option value="2">主干大纲</option>
             </select>
           </div>
+          <div style="padding:0 10px 8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;flex-shrink:0;">
+            <select id="tocSourceSelect" aria-label="目录来源" style="font-size:12px;flex:1;">
+              <option value="auto">当前目录 保留规则基线</option>
+              <option value="local_model">本地模型建议 待人工核验</option>
+              <option value="rules">规则目录</option>
+            </select>
+            <button id="tocStructureReviewBtn" style="font-size:12px;">本地模型目录审查</button>
+            <span id="tocReviewStatus" class="muted" style="font-size:11px;line-height:1.5;flex-basis:100%;"></span>
+          </div>
           <div id="tocAccordionList" class="sidebar-scroll"></div>
         </div>
 
@@ -1664,12 +1673,168 @@
     // =========================================================
     // Left Sidebar in Index Hub: 5-Volume TOC & Excavation Units
     // =========================================================
-    async function loadAllToc() {
+    async function loadAllToc(refresh = false) {
       let maxLvl = $('tocLevelSelect').value;
       let q = $('tocFilterInput').value.trim();
-      allToc = await request(`/api/toc?manifest=all&max_level=${maxLvl}&q=${encodeURIComponent(q)}`);
+      let source = $('tocSourceSelect').value;
+      allToc = await request('/api/toc?manifest=all&max_level=' + maxLvl + '&q=' + encodeURIComponent(q)
+        + '&source=' + source + '&refresh=' + (refresh === true ? '1' : '0'));
+      let modelCount = allToc.filter(item => (item.source_method || '').startsWith('local_model')).length;
+      $('tocReviewStatus').textContent = source === 'rules' || source === 'auto'
+        ? '保留规则目录；本地模型建议可单独预览，待人工核验。'
+        : modelCount ? '当前目录含 ' + modelCount + ' 项本地模型建议，待人工核验。'
+          : '当前未显示本地模型条目；可查看审查记录与覆盖范围。';
       renderSidebarToc();
       renderReaderToc();
+    }
+
+    function tocTreeOrder(items) {
+      const byId = new Map(items.map(item => [item.id, item]));
+      const children = new Map(), roots = [];
+      for (const item of items) {
+        if (item.parent_id && item.parent_id !== item.id && byId.has(item.parent_id)) {
+          if (!children.has(item.parent_id)) children.set(item.parent_id, []);
+          children.get(item.parent_id).push(item);
+        } else roots.push(item);
+      }
+      const ordered = [], visited = new Set();
+      function visit(item, depth) {
+        if (visited.has(item.id)) return;
+        visited.add(item.id);
+        ordered.push({...item, display_depth:depth});
+        for (const child of children.get(item.id) || []) visit(child, depth + 1);
+      }
+      for (const root of roots) visit(root, 1);
+      for (const item of items) if (!visited.has(item.id)) visit(item, 1);
+      return ordered;
+    }
+
+    function createTocRow(item, onclick) {
+      const depth = item.display_depth || item.level || 1;
+      const row = document.createElement('div');
+      row.className = 'toc-row lvl-' + Math.min(6, depth);
+      row.style.paddingLeft = (6 + (depth - 1) * 10) + 'px';
+      const label = document.createElement('span');
+      label.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1';
+      label.textContent = item.title;
+      label.title = item.title;
+      row.append(label);
+      if ((item.source_method || '').startsWith('local_model')) {
+        const badge = document.createElement('span');
+        badge.className = 'badge'; badge.textContent = '模型待审';
+        badge.style.fontSize = '10px'; row.append(badge);
+      }
+      const page = document.createElement('span');
+      page.className = 'toc-pnum';
+      page.textContent = item.printed_page ? 'p.' + item.printed_page : item.scan_index ? '#' + item.scan_index : '';
+      row.append(page); row.onclick = onclick;
+      return row;
+    }
+
+    async function openTocStructureReview() {
+      document.getElementById('tocStructureDialog')?.remove();
+      const dialog = document.createElement('dialog');
+      dialog.id = 'tocStructureDialog';
+      dialog.style.cssText = 'width:88vw;max-width:1000px;max-height:88vh;overflow:auto;padding:24px';
+      const title = document.createElement('h3'); title.textContent = '本地模型目录审查';
+      dialog.append(title);
+      const description = document.createElement('p');
+      description.textContent = '模型对章节类型和父子关系提出建议，未覆盖部分保留规则结构。此处切换目录视图不会将建议标为人工确认。';
+      dialog.append(description);
+      const controls = document.createElement('div');
+      controls.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;align-items:center';
+      const docLabel = document.createElement('label'); docLabel.textContent = '文献 ';
+      const docSelect = document.createElement('select'); docSelect.setAttribute('aria-label', '审查文献');
+      for (const doc of docs) docSelect.append(new Option(doc.short_title || doc.title, doc.id));
+      docSelect.value = activeIndexVol !== 'all' ? activeIndexVol : $('documents').value || docs[0]?.id || '';
+      docLabel.append(docSelect); controls.append(docLabel);
+      const sourceLabel = document.createElement('label'); sourceLabel.textContent = '显示 ';
+      const sourceSelect = document.createElement('select'); sourceSelect.setAttribute('aria-label', '审查目录视图');
+      sourceSelect.append(new Option('当前目录 保留规则基线', 'auto'), new Option('仅规则目录', 'rules'));
+      sourceSelect.append(new Option('本地模型建议 待人工核验', 'local_model'));
+      sourceSelect.value = $('tocSourceSelect').value === 'auto' ? 'local_model' : $('tocSourceSelect').value;
+      sourceLabel.append(sourceSelect); controls.append(sourceLabel);
+      const status = document.createElement('p'); status.setAttribute('aria-live', 'polite');
+      const judgments = document.createElement('details');
+      const judgmentsTitle = document.createElement('summary'); judgmentsTitle.textContent = '查看本轮判断与原文依据';
+      judgments.append(judgmentsTitle);
+      const judgmentsBody = document.createElement('div'); judgments.append(judgmentsBody);
+      const tree = document.createElement('div'); tree.style.cssText = 'max-height:52vh;overflow:auto;border-top:1px solid #ddd;margin-top:12px;padding-top:8px';
+      function button(label, action) {
+        const button = document.createElement('button'); button.textContent = label;
+        button.onclick = async () => {
+          button.disabled = true;
+          try { await action(); } catch (error) { status.textContent = error.message; }
+          finally { button.disabled = false; }
+        };
+        controls.append(button);
+      }
+      async function refresh() {
+        if (!docSelect.value) { status.textContent = '暂无可审查文献。'; return; }
+        status.textContent = '正在读取审查记录…';
+        let view = await request('/api/toc_structure?manifest=' + encodeURIComponent(docSelect.value) + '&source=' + sourceSelect.value);
+        const run = view.run;
+        if (!run) {
+          status.textContent = '该文献暂无本地模型审查记录，当前显示规则目录。';
+        } else {
+          const processed = run.processed ?? 0, total = run.total ?? view.items.length;
+          status.textContent = '本地模型 ' + run.model + '；已审查 ' + processed + ' / ' + total
+            + ' 项；变更建议 ' + (run.changes ?? 0) + ' 项；未覆盖 ' + (run.remaining ?? Math.max(0,total - processed)) + ' 项。'
+            + (run.status === 'stale' || run.source_current === false ? ' 原文已变化，模型建议已失效。'
+              : run.status === 'running' ? ' 本轮审查正在进行，尚未完成。' : ' 模型结论待人工核验。');
+          if (run.scope && (run.scope.start_scan || run.scope.end_scan)) {
+            status.textContent += ' 本轮页序范围 ' + (run.scope.start_scan || '起始') + ' 至 ' + (run.scope.end_scan || '末页') + '。';
+          }
+        }
+        judgmentsBody.replaceChildren();
+        const suggestions = (run?.suggestions || []).slice(0,12);
+        judgments.hidden = !suggestions.length;
+        for (const suggestion of suggestions) {
+          const section = document.createElement('section');
+          section.style.cssText = 'border-top:1px solid #eee;padding-top:8px;margin-top:8px';
+          const heading = document.createElement('strong');
+          heading.textContent = suggestion.title + ' · PDF第' + suggestion.scan_index + '页 · '
+            + (suggestion.keep ? '建议保留为第' + suggestion.level + '层章节' : '建议排除出章节目录');
+          const reason = document.createElement('p'); reason.textContent = suggestion.reason || '未提供简短依据';
+          const quote = document.createElement('blockquote');
+          quote.style.cssText = 'white-space:pre-wrap;margin:8px 0;padding-left:12px;border-left:2px solid #ddd';
+          quote.textContent = '原文证据：' + (suggestion.evidence || '');
+          section.append(heading, reason, quote);
+          const locate = document.createElement('button'); locate.textContent = '定位该标题原页';
+          locate.onclick = async () => {
+            dialog.close(); dialog.remove();
+            await jumpToPage(docSelect.value, null, suggestion.scan_index, null, 'text');
+          };
+          section.append(locate); judgmentsBody.append(section);
+        }
+        if ((run?.suggestions || []).length > 12) {
+          const more = document.createElement('p');
+          more.textContent = '此处显示前12项判断；完整结果保存在本轮目录审查记录中。';
+          judgmentsBody.append(more);
+        }
+        tree.replaceChildren();
+        for (const item of tocTreeOrder(view.items)) {
+          tree.append(createTocRow(item, async () => {
+            dialog.close(); dialog.remove();
+            await jumpToPage(docSelect.value, item.canvas_id, item.scan_index, item.xywh, 'text');
+          }));
+        }
+        if (!view.items.length) {
+          const empty = document.createElement('p'); empty.textContent = '暂无可显示的章节条目。'; tree.append(empty);
+        }
+      }
+      button('刷新审查记录', refresh);
+      button('在侧栏显示此视图', async () => {
+        $('tocSourceSelect').value = sourceSelect.value;
+        await loadAllToc(true);
+        dialog.close(); dialog.remove();
+      });
+      button('关闭', () => { dialog.close(); dialog.remove(); });
+      docSelect.onchange = () => refresh().catch(error => { status.textContent = error.message; });
+      sourceSelect.onchange = docSelect.onchange;
+      dialog.append(controls, status, judgments, tree);
+      document.body.append(dialog); dialog.showModal();
+      await refresh();
     }
 
     function renderSidebarToc() {
@@ -1694,14 +1859,11 @@
         let body = document.createElement('div');
         body.className = 'vol-acc-body';
 
-        for (let item of items) {
-          let row = document.createElement('div');
-          row.className = `toc-row lvl-${item.level}`;
-          let pStr = item.printed_page ? `p.${item.printed_page}` : (item.scan_index ? `#${item.scan_index}` : '');
-          let icon = item.level === 6 ? '<span style="margin-right:4px;">🏺</span>' : '';
-          row.innerHTML = `<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;" title="${item.title}">${icon}${item.title}</span><span class="toc-pnum">${pStr}</span>`;
-          row.onclick = () => jumpToPage(item.manifest_id, item.canvas_id, item.scan_index, item.xywh, item.level === 6 ? 'figure' : 'text');
-          body.appendChild(row);
+        for (let item of tocTreeOrder(items)) {
+          body.appendChild(createTocRow(item, () => jumpToPage(
+            item.manifest_id, item.canvas_id, item.scan_index, item.xywh,
+            item.source_method === 'figure_index' ? 'figure' : 'text'
+          )));
         }
 
         head.onclick = () => {
@@ -1755,6 +1917,8 @@
       $('sideTocPane').style.display = 'none';
     };
     $('tocLevelSelect').onchange = loadAllToc;
+    $('tocSourceSelect').onchange = () => loadAllToc(true).catch(error => notice(error.message));
+    $('tocStructureReviewBtn').onclick = () => openTocStructureReview().catch(error => notice(error.message));
     $('tocFilterInput').oninput = () => {
       clearTimeout(window._tocTimer);
       window._tocTimer = setTimeout(loadAllToc, 220);
@@ -3041,16 +3205,11 @@
         pane.innerHTML = '<div class="empty">正在加载本卷目录…</div>';
         return;
       }
-      for (let item of items) {
-        let row = document.createElement('div');
-        row.className = `toc-row lvl-${item.level}`;
-        let pStr = item.printed_page ? `p.${item.printed_page}` : `#${item.scan_index}`;
-        let icon = item.level === 6 ? '<span style="margin-right:4px;">🏺</span>' : '';
-        row.innerHTML = `<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;" title="${item.title}">${icon}${item.title}</span><span class="toc-pnum">${pStr}</span>`;
-        row.onclick = () => {
+      for (let item of tocTreeOrder(items)) {
+        let row = createTocRow(item, () => {
           let idx = pages.findIndex(p => p.id === item.canvas_id || p.scan_index === item.scan_index);
-          showPage(idx >= 0 ? idx : 0, item.xywh, item.level === 6 ? 'figure' : 'text');
-        };
+          showPage(idx >= 0 ? idx : 0, item.xywh, item.source_method === 'figure_index' ? 'figure' : 'text');
+        });
         pane.appendChild(row);
       }
     }

@@ -36,6 +36,8 @@ def test_resume_idempotence_and_source_preservation(tmp_path):
     cache_time=checkpoint.stat().st_mtime_ns
     completed=run_document(PDF,tmp_path,settings_path=tmp_path/"no-model.env",max_pages=5)
     assert completed["status"]=="completed"
+    assert completed["toc_stage"]["status"] in {"unavailable", "no_candidates"}
+    assert (tmp_path / completed["run_id"] / "toc_structure.json").exists()
     assert checkpoint.stat().st_mtime_ns==cache_time
     repeated=run_document(PDF,tmp_path,settings_path=tmp_path/"no-model.env",max_pages=5)
     assert repeated["stats"]["reused"]

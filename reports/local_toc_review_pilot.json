@@ -1,0 +1,299 @@
+{
+  "summary": {
+    "id": "41a931f0-19dd-4cca-a863-2782b0f9cf5c",
+    "status": "completed_with_review",
+    "model": "Qwen3-4B-Q4_K_M.gguf",
+    "model_identity": {
+      "name": "Qwen3-4B-Q4_K_M.gguf",
+      "sha256": "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
+      "size": 2497280256
+    },
+    "source_digest": "89f99c2774b1a38e08c72d24ff067ac811e0cfbfcaebfa55edbd39b7a0bb650b",
+    "total": 909,
+    "eligible": 115,
+    "selected": 24,
+    "processed": 24,
+    "changes": 6,
+    "excluded": 7,
+    "added": 0,
+    "reparented": 0,
+    "batches": 6,
+    "cache_hits": 0,
+    "errors": [],
+    "cloud_calls": 0,
+    "scope": {
+      "start_scan": 59,
+      "end_scan": 125
+    },
+    "review_status": "pending",
+    "config": {
+      "version": "local-toc-v2",
+      "max_nodes": 24,
+      "batch_size": 4,
+      "max_batches": 6,
+      "start_scan": 59,
+      "end_scan": 125
+    },
+    "remaining": 885,
+    "elapsed_seconds": 42.656,
+    "backup": "D:\\Documents\\Github\\PKU-LM-Humanities-Data-Lab\\data\\processed\\library\\backups\\before-local-toc-1793975765407021400.db"
+  },
+  "review": {
+    "id": "41a931f0-19dd-4cca-a863-2782b0f9cf5c",
+    "status": "completed_with_review",
+    "model": "Qwen3-4B-Q4_K_M.gguf",
+    "model_identity": {
+      "name": "Qwen3-4B-Q4_K_M.gguf",
+      "sha256": "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
+      "size": 2497280256
+    },
+    "source_digest": "89f99c2774b1a38e08c72d24ff067ac811e0cfbfcaebfa55edbd39b7a0bb650b",
+    "total": 909,
+    "eligible": 115,
+    "selected": 24,
+    "processed": 24,
+    "changes": 6,
+    "excluded": 7,
+    "added": 0,
+    "reparented": 0,
+    "batches": 6,
+    "cache_hits": 0,
+    "errors": [],
+    "cloud_calls": 0,
+    "scope": {
+      "start_scan": 59,
+      "end_scan": 125
+    },
+    "review_status": "pending",
+    "config": {
+      "version": "local-toc-v2",
+      "max_nodes": 24,
+      "batch_size": 4,
+      "max_batches": 6,
+      "start_scan": 59,
+      "end_scan": 125
+    },
+    "remaining": 885,
+    "elapsed_seconds": 42.656,
+    "source_current": true,
+    "suggestions": [
+      {
+        "title": "第一部分　总　　论",
+        "scan_index": 59,
+        "keep": true,
+        "level": 1,
+        "parent_id": null,
+        "reason": "明确的部分标题",
+        "evidence": "第一部分　总　　论"
+      },
+      {
+        "title": "第一章　地理环境与历史沿革",
+        "scan_index": 61,
+        "keep": true,
+        "level": 2,
+        "parent_id": "n00555",
+        "reason": "明确的部分标题",
+        "evidence": "第一章　地理环境与历史沿革"
+      },
+      {
+        "title": "第一节　概　　述",
+        "scan_index": 61,
+        "keep": true,
+        "level": 3,
+        "parent_id": "n00556",
+        "reason": "明确的部分标题",
+        "evidence": "第一节　概　　述"
+      },
+      {
+        "title": "第二节　地 理 环 境",
+        "scan_index": 61,
+        "keep": false,
+        "level": 0,
+        "parent_id": null,
+        "reason": "图题、图版号、器物编号列表、页眉和正文残句",
+        "evidence": "第二节　地 理 环 境"
+      },
+      {
+        "title": "b。这一数据采",
+        "scan_index": 63,
+        "keep": false,
+        "level": 0,
+        "parent_id": null,
+        "reason": "图注而非章节",
+        "evidence": "b。这一数据采"
+      },
+      {
+        "title": "第三节　历 史 沿 革",
+        "scan_index": 65,
+        "keep": true,
+        "level": 3,
+        "parent_id": "n00556",
+        "reason": "明确的章节标题",
+        "evidence": "第三节　历 史 沿 革"
+      },
+      {
+        "title": "第二章　考古工作与报告编写",
+        "scan_index": 67,
+        "keep": true,
+        "level": 2,
+        "parent_id": "n00555",
+        "reason": "明确的章节标题",
+        "evidence": "第二章　考古工作与报告编写"
+      },
+      {
+        "title": "第一节　文 献 记 录",
+        "scan_index": 67,
+        "keep": true,
+        "level": 3,
+        "parent_id": "n00572",
+        "reason": "明确的章节标题",
+        "evidence": "第一节　文 献 记 录"
+      },
+      {
+        "title": "第二节　景德镇民窑遗址的考古工作",
+        "scan_index": 70,
+        "keep": true,
+        "level": 3,
+        "parent_id": "n00572",
+        "reason": "属于第二章下的第二节",
+        "evidence": "第二节　景德镇民窑遗址的考古工作"
+      },
+      {
+        "title": "第三节　报 告 编 写",
+        "scan_index": 78,
+        "keep": false,
+        "level": 0,
+        "parent_id": null,
+        "reason": "非章节标题",
+        "evidence": "第三节　报 告 编 写"
+      },
+      {
+        "title": "第三章　窑址情况与地层介绍",
+        "scan_index": 80,
+        "keep": false,
+        "level": 0,
+        "parent_id": null,
+        "reason": "非章节标题",
+        "evidence": "第三章　窑址情况与地层介绍"
+      },
+      {
+        "title": "第一节　探 方 分 布",
+        "scan_index": 80,
+        "keep": false,
+        "level": 0,
+        "parent_id": null,
+        "reason": "非章节标题",
+        "evidence": "第一节　探 方 分 布"
+      },
+      {
+        "title": "第二节　典 型 地 层",
+        "scan_index": 81,
+        "keep": false,
+        "level": 0,
+        "parent_id": null,
+        "reason": "新章后不能挂回已结束的前章",
+        "evidence": "第二节　典 型 地 层"
+      },
+      {
+        "title": "一、探方 1扩方部分（T1扩）",
+        "scan_index": 81,
+        "keep": false,
+        "level": 0,
+        "parent_id": null,
+        "reason": "图题而非章节",
+        "evidence": "一、探方 1扩方部分（T1扩）"
+      },
+      {
+        "title": "第二部分　宋元时期遗存",
+        "scan_index": 91,
+        "keep": true,
+        "level": 1,
+        "parent_id": null,
+        "reason": "明确的部分标题",
+        "evidence": "第二部分　宋元时期遗存"
+      },
+      {
+        "title": "第一章　宋元时期主要遗迹",
+        "scan_index": 93,
+        "keep": true,
+        "level": 2,
+        "parent_id": "n00622",
+        "reason": "明确的部分标题",
+        "evidence": "第一章　宋元时期主要遗迹"
+      },
+      {
+        "title": "第一节　房　　址",
+        "scan_index": 93,
+        "keep": true,
+        "level": 3,
+        "parent_id": "n00623",
+        "reason": "明确的章节标题",
+        "evidence": "第一节　房　　址"
+      },
+      {
+        "title": "第二节　墙",
+        "scan_index": 96,
+        "keep": true,
+        "level": 3,
+        "parent_id": "n00623",
+        "reason": "明确的章节标题",
+        "evidence": "第二节　墙"
+      },
+      {
+        "title": "第三节　池　　子",
+        "scan_index": 99,
+        "keep": true,
+        "level": 3,
+        "parent_id": "n00623",
+        "reason": "明确的章节标题",
+        "evidence": "第三节　池　　子"
+      },
+      {
+        "title": "第四节　路",
+        "scan_index": 99,
+        "keep": true,
+        "level": 3,
+        "parent_id": "n00623",
+        "reason": "明确的章节标题",
+        "evidence": "第四节　路"
+      },
+      {
+        "title": "第五节　灰　　坑",
+        "scan_index": 100,
+        "keep": true,
+        "level": 3,
+        "parent_id": "n00623",
+        "reason": "明确的章节标题",
+        "evidence": "第五节　灰　　坑"
+      },
+      {
+        "title": "第六节　 沟",
+        "scan_index": 106,
+        "keep": true,
+        "level": 3,
+        "parent_id": "n00623",
+        "reason": "明确的章节标题",
+        "evidence": "第六节　 沟"
+      },
+      {
+        "title": "第二章　宋元时期遗物",
+        "scan_index": 107,
+        "keep": true,
+        "level": 2,
+        "parent_id": "n00622",
+        "reason": "明确的章节标题",
+        "evidence": "第二章　宋元时期遗物"
+      },
+      {
+        "title": "第一节　普 通 陶 瓷",
+        "scan_index": 107,
+        "keep": true,
+        "level": 3,
+        "parent_id": "n00656",
+        "reason": "明确的章节标题",
+        "evidence": "第一节　普 通 陶 瓷"
+      }
+    ]
+  },
+  "deployment_policy": "Rules remain default; local-model conclusions are an explicit pending preview."
+}
