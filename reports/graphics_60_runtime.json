@@ -1,0 +1,44 @@
+{
+  "run_id": "0aa002a7-dcb1-48e0-aff0-3f57ffea2c8e",
+  "published": false,
+  "accuracy": "not measured; independent annotations required",
+  "implementation_hash": "1ff9a98f9589890e2f1fdbd8532cca6c4667539379e9898a893de4d9a8d9d3f7",
+  "wall_seconds": 1513.1301642000035,
+  "peak_rss_mib": 2729.3203125,
+  "first_page_wall_seconds": 28.797919899996486,
+  "model_load_seconds": {
+    "PP-DocLayout_plus-L": 2.8061812999949325,
+    "PP-LCNet_x1_0_doc_ori": 0.05593319999752566,
+    "SLANet_plus": 0.16469180000422057,
+    "PP-LCNet_x1_0_table_cls": 0.05705139999918174,
+    "SLANeXt_wireless": 1.2048998000100255,
+    "RT-DETR-L_wireless_table_cell_det": 0.8331285000022035,
+    "SLANeXt_wired": 0.9898647999943933,
+    "RT-DETR-L_wired_table_cell_det": 0.7434805000084452
+  },
+  "cache_hits": 0,
+  "page_groups": {
+    "no_detected_graphic": {
+      "pages": 15,
+      "mean_seconds": 3.682780666665834,
+      "median_seconds": 3.672711799998069,
+      "p95_seconds": 4.097781499993289
+    },
+    "table_page": {
+      "pages": 40,
+      "mean_seconds": 35.81855960499888,
+      "median_seconds": 30.732751049996295,
+      "p95_seconds": 92.59891800000332
+    },
+    "figure_or_chart_page": {
+      "pages": 5,
+      "mean_seconds": 4.838437960002921,
+      "median_seconds": 4.956733099999838,
+      "p95_seconds": 5.9142464000033215
+    }
+  },
+  "detected_regions": 78,
+  "local_structure_review_candidates": 35,
+  "review_fraction": 0.44871794871794873,
+  "sampling_note": "Purposeful appendix-heavy sample; not a random estimate of the whole book. CPU contention may affect times."
+}

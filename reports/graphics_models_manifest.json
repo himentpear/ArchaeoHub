@@ -1,0 +1,134 @@
+{
+  "checksum_scope": "local downloaded bytes; not upstream signature verification",
+  "models": {
+    "PP-DocLayout_plus-L": {
+      "files_sha256": {
+        "inference.json": "99bd09c0a1b9e88d35c65c305b91711d98055fc94b4a6eecd50da02e04729384",
+        "inference.pdiparams": "24ca3e2e442164505e250deef59f7ee9a54ea12dd32875c9cd6155d959dc97da",
+        "inference.yml": "d60f782a16f96afb27e8280399899a94c3e9ffc694ffb2f913ea00af1c522f1e"
+      }
+    },
+    "PP-DocLayout-S": {
+      "files_sha256": {
+        "inference.json": "ac09e931895d4c442e5379ab3b7e9b583baf288e816ab7675ca519da9eb2a9d7",
+        "inference.pdiparams": "491c3382d84ca04d2033afbee0c105942ed82fea392bb4a19170646adebe088a",
+        "inference.yml": "6f690098c438214c67822239a568f0bc2bbe97a8f02fba93e492d4f2c47523c3"
+      }
+    },
+    "PP-LCNet_x1_0_doc_ori": {
+      "files_sha256": {
+        ".msc": "97b5d9da39f10237c3301604c38259e68ef2a8ba895fb3a28b518acb8d56a9fe",
+        ".mv": "8a35518fb5db926ff6d4a2df6f3fc833a5c528c750805e448e98d431aba1798d",
+        "config.json": "e49f6be2fe4034232b05fb80d983a7b9bde4592d4a52812129c9a348057d3147",
+        "inference.json": "3580978602f309c3554508dd85d4fe09b73a7e0d80d7f9e63258f5b72c390c69",
+        "inference.pdiparams": "e8d6e7c5d264507e40e58a655779059d616b20d7441ea22047d829eb3931989c",
+        "inference.yml": "9e195eb729a8173588cd0e8a852c8b373aa606e79e77b4ac7d8346f5426caf26",
+        "README.md": "1575198e849fd659e26a670b877bd2b3f3e89ba98d0cfb60360f4dd40ff9c864"
+      }
+    },
+    "PP-LCNet_x1_0_table_cls": {
+      "files_sha256": {
+        "inference.json": "43401e76ed7b0e34787533016ea4ec9193d5b5964c3f948991fc5b531651ef33",
+        "inference.pdiparams": "d0224afd9cfddf22da17407c6c78491baaa1f25922fbb312c9b0d2037c802db0",
+        "inference.yml": "891b1f4b0ccddaf6aca0fce8c8a38e5ab5da9f62fb9adaa7c75e161ee03bb787"
+      }
+    },
+    "SLANet_plus": {
+      "files_sha256": {
+        "inference.json": "aba91cd956f4a1648b0f89df94c3cf8acaa066b47e2b689d109843b40d8545a2",
+        "inference.pdiparams": "012986b0e2bfe90410618bfb4b7cf4fcb6c978caefd84c63c2934f8387b09ab8",
+        "inference.yml": "8a6372d3269a6f112fe13a2da7952a84da6e112c10a3146cbb43de5bd01d19fa"
+      }
+    },
+    "SLANeXt_wired": {
+      "files_sha256": {
+        "inference.json": "5b872f08e74f628ca1db8405db147e82e6e0c7cb358e101fd01cdafc946632d8",
+        "inference.pdiparams": "ff0362a30f707fa7d27d8453c4396b992fca287377a42d01515bca6eeb3908f5",
+        "inference.yml": "abbbd1b4dc6b1a2e9cd34c035514da53a1a6b1ec267292b0b8802025650a33bf"
+      }
+    },
+    "SLANeXt_wireless": {
+      "files_sha256": {
+        "inference.json": "5b872f08e74f628ca1db8405db147e82e6e0c7cb358e101fd01cdafc946632d8",
+        "inference.pdiparams": "6bf0568e24638491c75920954a92583d8c0d46aa76a2a635fb2fa666ffb618ff",
+        "inference.yml": "58d1d7fdffd3e58cfec98571b817ea012f2107d644bd4f8e4607fae84f1923a6"
+      }
+    },
+    "RT-DETR-L_wired_table_cell_det": {
+      "files_sha256": {
+        "inference.json": "abea237f1e53d3dc3bf7ea1321dfebe78552a6070e567dfc94028b622fd575e8",
+        "inference.pdiparams": "357321c2845f0a035e8d118622649685a3cdb89d28b09a64e45a5a3df7a9fedc",
+        "inference.yml": "edf6d6180f2b9e3e666c744ee5ded38a72c6ef9056cd193250e3e55ba268acef"
+      }
+    },
+    "RT-DETR-L_wireless_table_cell_det": {
+      "files_sha256": {
+        "inference.json": "abea237f1e53d3dc3bf7ea1321dfebe78552a6070e567dfc94028b622fd575e8",
+        "inference.pdiparams": "c0f8c9ea07be8916ece73a8acf807bd21aed3ef11969b319c2dccb2406774c34",
+        "inference.yml": "f2d0f00ea42aacc162f72a35cf54330e392a7d669e9a1b43896d3bd77a512621"
+      }
+    },
+    "PaddleOCR-VL-1.6-0.9B": {
+      "files_sha256": {
+        ".gitattributes": "34448b82c17d60fec9b65b1f093c115ddbaadc04beb1b0140b6bfed2e012a930",
+        "added_tokens.json": "f59f889088e0fe21c523e7cf121bb6dca3b0bb148cb7159fbb4572c74dfc5644",
+        "chat_template.jinja": "2f27812dab7f333e471884e0c803d807f11953d5453140dfb1aaba234f872bc8",
+        "config.json": "ce7f4565f8b1db78532ad5d1b9ebe55c2139d49bd4cb04778b580a08a598f171",
+        "configuration_paddleocr_vl.py": "753dd93654c3a9c8c85a3eaee1e3092dd12591b0f2dce0305e1abfb7a41ff160",
+        "generation_config.json": "a6701d78ab3b4d972307cdec3b69d4c13f46e0d5140514f50ab7d84259324b94",
+        "image_processing_paddleocr_vl.py": "a4fa521b9cb16e207f94b7f2d16427771776dfc634420d319fc4916ee58049ec",
+        "inference.yml": "1587aece2d6442366efce34161d5f7d5f67f09ebfbf043168e5fade892c2780e",
+        "LICENSE": "b8c4d7deccd236af023af1c88c4d4e8f0fc2f41914e0fb23a3ec9678fb5a8456",
+        "model.safetensors": "85a479d506a11e724e7285d395c551be69f41dbc16b6342d3cacfb189aed71db",
+        "modeling_paddleocr_vl.py": "c5013dff57ca8b87dc1de64d0fd839a44313de09d230a4fb2d08289d2cad5111",
+        "preprocessor_config.json": "111872ab1e8bb7fd040ac5087bfced7ab8f011f02139b088cba294964c3b1d0e",
+        "processing_paddleocr_vl.py": "e29cb1e5f275f2bd3ce051bd5c9983a33894e693b2823a0e13d4c07c8c4f9e13",
+        "processor_config.json": "1568858960a9760c54431dae693a6152e601ff55cdf6d2eab97a4a99958faea0",
+        "README.md": "3e0e15fa0c5cc81675bd69af8eb469d128a725c1a7bfc71f03b7877b7b650567",
+        "special_tokens_map.json": "d3a125c03103deb2acaf7730791bdbbf196f620e5a2213b664511ff9b4b25bab",
+        "tokenizer.json": "c8a215a59183d0d0781adc33bacd3ce6162716f7fd568fb30234a74d69803a7d",
+        "tokenizer.model": "34ef7db83df785924fb83d7b887b6e822a031c56e15cff40aaf9b982988180df",
+        "tokenizer_config.json": "1f979337347cc0cb72a6282d8a23ed183539aa81a87a906f022aee2bab83c7c5",
+        ".cache\\huggingface\\.gitignore": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1",
+        ".cache\\huggingface\\download\\.gitattributes.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ".cache\\huggingface\\download\\.gitattributes.metadata": "ea63379baea78fe08bf5b1992ea070498930718ecacf0e0e3962f6ba8b4b773e",
+        ".cache\\huggingface\\download\\added_tokens.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ".cache\\huggingface\\download\\added_tokens.json.metadata": "4c3be026b48df21e1d33cd952a88ab64be7f3a3e865863958df90db3d44b8407",
+        ".cache\\huggingface\\download\\chat_template.jinja.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ".cache\\huggingface\\download\\chat_template.jinja.metadata": "3afdcf28cdbfd67139f01318f389746caa29f2f6ae57b1e2d3fd981738dc91dc",
+        ".cache\\huggingface\\download\\config.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ".cache\\huggingface\\download\\config.json.metadata": "dcf345f273b5728f9e6803aa26ee2f5a39f3cea770dc6771da1773c344eb30a5",
+        ".cache\\huggingface\\download\\configuration_paddleocr_vl.py.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ".cache\\huggingface\\download\\configuration_paddleocr_vl.py.metadata": "2326c2277f6a18c249f727c862f66edbc24a7e5860e64cce721ac6961f4c1827",
+        ".cache\\huggingface\\download\\generation_config.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ".cache\\huggingface\\download\\generation_config.json.metadata": "acfce2389cb82ea011ec160484ca8dbcd2f3ea735ef1a594f70ac74d787b3325",
+        ".cache\\huggingface\\download\\image_processing_paddleocr_vl.py.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ".cache\\huggingface\\download\\image_processing_paddleocr_vl.py.metadata": "ea50a521d4a42cef0abf6672649a0c206a9d059542365cf1d197a9c5ebcf5ad2",
+        ".cache\\huggingface\\download\\inference.yml.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ".cache\\huggingface\\download\\inference.yml.metadata": "b65f88d8cf02383e1e952c7d33cb8845f27918c0cb4585168f0e2c4a91c86c66",
+        ".cache\\huggingface\\download\\LICENSE.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ".cache\\huggingface\\download\\LICENSE.metadata": "d6170a3cb07b33c6c97916221656c7ffa9474f811fdbbcba0d1b25aeadc9cc7a",
+        ".cache\\huggingface\\download\\model.safetensors.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ".cache\\huggingface\\download\\model.safetensors.metadata": "ca464da736d71d28046ecfccfcb7287726d981ee151e7c9be77d707a5e57c10e",
+        ".cache\\huggingface\\download\\modeling_paddleocr_vl.py.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ".cache\\huggingface\\download\\modeling_paddleocr_vl.py.metadata": "73bee9cc6b9506bcf154c1cd6881427553f91e18c8aa5cb56caf5cf87b17addf",
+        ".cache\\huggingface\\download\\preprocessor_config.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ".cache\\huggingface\\download\\preprocessor_config.json.metadata": "ad995ef44b282058ccd2970417e1b3fa1637088a32bb6e38e3978a8e33501cbd",
+        ".cache\\huggingface\\download\\processing_paddleocr_vl.py.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ".cache\\huggingface\\download\\processing_paddleocr_vl.py.metadata": "29a0049036c313ee2bb05d67ca783194e612e1b364fe1c192078300ee513932e",
+        ".cache\\huggingface\\download\\processor_config.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ".cache\\huggingface\\download\\processor_config.json.metadata": "951feabd38695886ef3228352744835cbe269257f22302870a0d8deea66ec4a7",
+        ".cache\\huggingface\\download\\README.md.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ".cache\\huggingface\\download\\README.md.metadata": "16ba1bb6d3776a61793fc60256a127781ca3e845db50d37dd376cb2eba3e33ae",
+        ".cache\\huggingface\\download\\special_tokens_map.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ".cache\\huggingface\\download\\special_tokens_map.json.metadata": "84c612f7b8b94cc2f0756d7610b173b3cfbf8fa3c3a21bfb539180264097032e",
+        ".cache\\huggingface\\download\\tokenizer.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ".cache\\huggingface\\download\\tokenizer.json.metadata": "59e7fd96fe08a101c1c3e36a3cfd6c51f8be64d0a89c9d7e75519bcd9b0b22e9",
+        ".cache\\huggingface\\download\\tokenizer.model.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ".cache\\huggingface\\download\\tokenizer.model.metadata": "50fa799da8e29c2854cd0af8aa49e7700e9f8205b7534050ee6a290d6ed1554e",
+        ".cache\\huggingface\\download\\tokenizer_config.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ".cache\\huggingface\\download\\tokenizer_config.json.metadata": "e79c34218ae565cc4ffe39bc7d6a64da398060a20b6f770b919d6504d882ec1d"
+      }
+    }
+  }
+}

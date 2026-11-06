@@ -1,0 +1,15 @@
+{
+  "run_id": "fd2c0b06-8b8b-4470-aaf3-ebb52085ca5c",
+  "scope": "mechanical grouping and provenance checks, not independent accuracy evaluation",
+  "checks": {
+    "p535_two_objects": true,
+    "p535_second_continues_p536": true,
+    "p538_540_grouped": true,
+    "p540_new_table_separate": true,
+    "production_source_unchanged": true
+  },
+  "fragments": 7,
+  "source_coverage": 1.0,
+  "source_errors": [],
+  "published": false
+}

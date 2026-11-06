@@ -1,0 +1,14 @@
+{
+  "tests": {
+    "passed": 42,
+    "command": ".venv/Scripts/python.exe -m pytest -q"
+  },
+  "javascript_syntax": "passed",
+  "real_staging_http": "4 objects, 12 exports, fragment and source images passed",
+  "database_integrity": "staging and production passed",
+  "production_source_guard": "unchanged",
+  "model_local_hash_verification": "10 models passed",
+  "runtime_dependency_check": "passed",
+  "acceptance": "not passed: independent annotations and real-scan stitching evaluation pending",
+  "production_graphics_published": false
+}

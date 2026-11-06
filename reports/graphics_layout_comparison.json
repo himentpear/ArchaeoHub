@@ -1,0 +1,728 @@
+[
+  {
+    "model": "PP-DocLayout_plus-L",
+    "pages": 60,
+    "median_seconds": 4.123077800002648,
+    "p95_seconds": 4.852530300006038,
+    "sum_seconds": 262.95945360002224,
+    "regions": 84,
+    "accuracy": "requires independent source annotations",
+    "runtime": {
+      "packages": {
+        "paddleocr": "3.7.0",
+        "paddlepaddle": "3.3.1",
+        "paddlex": "3.7.2",
+        "rapidocr": "3.10.0",
+        "onnxruntime": "1.24.4"
+      },
+      "weights_sha256": {
+        "PaddleOCR-VL-1.6\\added_tokens.json": "f59f889088e0fe21c523e7cf121bb6dca3b0bb148cb7159fbb4572c74dfc5644",
+        "PaddleOCR-VL-1.6\\config.json": "ce7f4565f8b1db78532ad5d1b9ebe55c2139d49bd4cb04778b580a08a598f171",
+        "PaddleOCR-VL-1.6\\generation_config.json": "a6701d78ab3b4d972307cdec3b69d4c13f46e0d5140514f50ab7d84259324b94",
+        "PaddleOCR-VL-1.6\\inference.yml": "1587aece2d6442366efce34161d5f7d5f67f09ebfbf043168e5fade892c2780e",
+        "PaddleOCR-VL-1.6\\preprocessor_config.json": "111872ab1e8bb7fd040ac5087bfced7ab8f011f02139b088cba294964c3b1d0e",
+        "PaddleOCR-VL-1.6\\processor_config.json": "1568858960a9760c54431dae693a6152e601ff55cdf6d2eab97a4a99958faea0",
+        "PaddleOCR-VL-1.6\\special_tokens_map.json": "d3a125c03103deb2acaf7730791bdbbf196f620e5a2213b664511ff9b4b25bab",
+        "PaddleOCR-VL-1.6\\tokenizer.json": "c8a215a59183d0d0781adc33bacd3ce6162716f7fd568fb30234a74d69803a7d",
+        "PaddleOCR-VL-1.6\\tokenizer_config.json": "1f979337347cc0cb72a6282d8a23ed183539aa81a87a906f022aee2bab83c7c5",
+        "PP-DocLayout-S\\inference.json": "ac09e931895d4c442e5379ab3b7e9b583baf288e816ab7675ca519da9eb2a9d7",
+        "PP-DocLayout-S\\inference.pdiparams": "491c3382d84ca04d2033afbee0c105942ed82fea392bb4a19170646adebe088a",
+        "PP-DocLayout-S\\inference.yml": "6f690098c438214c67822239a568f0bc2bbe97a8f02fba93e492d4f2c47523c3",
+        "PP-DocLayout_plus-L\\inference.json": "99bd09c0a1b9e88d35c65c305b91711d98055fc94b4a6eecd50da02e04729384",
+        "PP-DocLayout_plus-L\\inference.pdiparams": "24ca3e2e442164505e250deef59f7ee9a54ea12dd32875c9cd6155d959dc97da",
+        "PP-DocLayout_plus-L\\inference.yml": "d60f782a16f96afb27e8280399899a94c3e9ffc694ffb2f913ea00af1c522f1e",
+        "PP-LCNet_x1_0_doc_ori\\config.json": "e49f6be2fe4034232b05fb80d983a7b9bde4592d4a52812129c9a348057d3147",
+        "PP-LCNet_x1_0_doc_ori\\inference.json": "3580978602f309c3554508dd85d4fe09b73a7e0d80d7f9e63258f5b72c390c69",
+        "PP-LCNet_x1_0_doc_ori\\inference.pdiparams": "e8d6e7c5d264507e40e58a655779059d616b20d7441ea22047d829eb3931989c",
+        "PP-LCNet_x1_0_doc_ori\\inference.yml": "9e195eb729a8173588cd0e8a852c8b373aa606e79e77b4ac7d8346f5426caf26",
+        "PP-LCNet_x1_0_table_cls\\inference.json": "43401e76ed7b0e34787533016ea4ec9193d5b5964c3f948991fc5b531651ef33",
+        "PP-LCNet_x1_0_table_cls\\inference.pdiparams": "d0224afd9cfddf22da17407c6c78491baaa1f25922fbb312c9b0d2037c802db0",
+        "PP-LCNet_x1_0_table_cls\\inference.yml": "891b1f4b0ccddaf6aca0fce8c8a38e5ab5da9f62fb9adaa7c75e161ee03bb787",
+        "RT-DETR-L_wired_table_cell_det\\inference.json": "abea237f1e53d3dc3bf7ea1321dfebe78552a6070e567dfc94028b622fd575e8",
+        "RT-DETR-L_wired_table_cell_det\\inference.pdiparams": "357321c2845f0a035e8d118622649685a3cdb89d28b09a64e45a5a3df7a9fedc",
+        "RT-DETR-L_wired_table_cell_det\\inference.yml": "edf6d6180f2b9e3e666c744ee5ded38a72c6ef9056cd193250e3e55ba268acef",
+        "RT-DETR-L_wireless_table_cell_det\\inference.json": "abea237f1e53d3dc3bf7ea1321dfebe78552a6070e567dfc94028b622fd575e8",
+        "RT-DETR-L_wireless_table_cell_det\\inference.pdiparams": "c0f8c9ea07be8916ece73a8acf807bd21aed3ef11969b319c2dccb2406774c34",
+        "RT-DETR-L_wireless_table_cell_det\\inference.yml": "f2d0f00ea42aacc162f72a35cf54330e392a7d669e9a1b43896d3bd77a512621",
+        "SLANet_plus\\inference.json": "aba91cd956f4a1648b0f89df94c3cf8acaa066b47e2b689d109843b40d8545a2",
+        "SLANet_plus\\inference.pdiparams": "012986b0e2bfe90410618bfb4b7cf4fcb6c978caefd84c63c2934f8387b09ab8",
+        "SLANet_plus\\inference.yml": "8a6372d3269a6f112fe13a2da7952a84da6e112c10a3146cbb43de5bd01d19fa",
+        "SLANeXt_wired\\inference.json": "5b872f08e74f628ca1db8405db147e82e6e0c7cb358e101fd01cdafc946632d8",
+        "SLANeXt_wired\\inference.pdiparams": "ff0362a30f707fa7d27d8453c4396b992fca287377a42d01515bca6eeb3908f5",
+        "SLANeXt_wired\\inference.yml": "abbbd1b4dc6b1a2e9cd34c035514da53a1a6b1ec267292b0b8802025650a33bf",
+        "SLANeXt_wireless\\inference.json": "5b872f08e74f628ca1db8405db147e82e6e0c7cb358e101fd01cdafc946632d8",
+        "SLANeXt_wireless\\inference.pdiparams": "6bf0568e24638491c75920954a92583d8c0d46aa76a2a635fb2fa666ffb618ff",
+        "SLANeXt_wireless\\inference.yml": "58d1d7fdffd3e58cfec98571b817ea012f2107d644bd4f8e4607fae84f1923a6"
+      },
+      "model_load_seconds": {
+        "PP-DocLayout_plus-L": 4.15521080000326
+      },
+      "page_timings": [
+        {
+          "page": 1,
+          "seconds": 15.314361400000053,
+          "cache_hit": false
+        },
+        {
+          "page": 17,
+          "seconds": 3.936258599991561,
+          "cache_hit": false
+        },
+        {
+          "page": 22,
+          "seconds": 4.662508200010052,
+          "cache_hit": false
+        },
+        {
+          "page": 32,
+          "seconds": 3.9617230000003474,
+          "cache_hit": false
+        },
+        {
+          "page": 35,
+          "seconds": 3.6723235999961616,
+          "cache_hit": false
+        },
+        {
+          "page": 40,
+          "seconds": 3.784434200002579,
+          "cache_hit": false
+        },
+        {
+          "page": 57,
+          "seconds": 3.7309419000084745,
+          "cache_hit": false
+        },
+        {
+          "page": 80,
+          "seconds": 3.6737343999993755,
+          "cache_hit": false
+        },
+        {
+          "page": 100,
+          "seconds": 4.062182699999539,
+          "cache_hit": false
+        },
+        {
+          "page": 130,
+          "seconds": 4.008007600001292,
+          "cache_hit": false
+        },
+        {
+          "page": 160,
+          "seconds": 3.982240500001353,
+          "cache_hit": false
+        },
+        {
+          "page": 199,
+          "seconds": 4.408994500001427,
+          "cache_hit": false
+        },
+        {
+          "page": 250,
+          "seconds": 3.8101508999970974,
+          "cache_hit": false
+        },
+        {
+          "page": 300,
+          "seconds": 4.141829300002428,
+          "cache_hit": false
+        },
+        {
+          "page": 331,
+          "seconds": 4.569595900000422,
+          "cache_hit": false
+        },
+        {
+          "page": 400,
+          "seconds": 4.542803800010006,
+          "cache_hit": false
+        },
+        {
+          "page": 470,
+          "seconds": 4.227798500010977,
+          "cache_hit": false
+        },
+        {
+          "page": 535,
+          "seconds": 4.386560200000531,
+          "cache_hit": false
+        },
+        {
+          "page": 536,
+          "seconds": 4.852530300006038,
+          "cache_hit": false
+        },
+        {
+          "page": 537,
+          "seconds": 3.763906699998188,
+          "cache_hit": false
+        },
+        {
+          "page": 538,
+          "seconds": 4.259423800001969,
+          "cache_hit": false
+        },
+        {
+          "page": 539,
+          "seconds": 4.264816499999142,
+          "cache_hit": false
+        },
+        {
+          "page": 540,
+          "seconds": 4.3072128000058,
+          "cache_hit": false
+        },
+        {
+          "page": 541,
+          "seconds": 4.443213799997466,
+          "cache_hit": false
+        },
+        {
+          "page": 542,
+          "seconds": 4.7816967999970075,
+          "cache_hit": false
+        },
+        {
+          "page": 543,
+          "seconds": 4.370278500005952,
+          "cache_hit": false
+        },
+        {
+          "page": 544,
+          "seconds": 4.7554491000046255,
+          "cache_hit": false
+        },
+        {
+          "page": 545,
+          "seconds": 4.757231199997477,
+          "cache_hit": false
+        },
+        {
+          "page": 546,
+          "seconds": 4.199041400002898,
+          "cache_hit": false
+        },
+        {
+          "page": 547,
+          "seconds": 3.7244372999994084,
+          "cache_hit": false
+        },
+        {
+          "page": 548,
+          "seconds": 3.744695799992769,
+          "cache_hit": false
+        },
+        {
+          "page": 549,
+          "seconds": 3.714975199996843,
+          "cache_hit": false
+        },
+        {
+          "page": 550,
+          "seconds": 4.257098399990355,
+          "cache_hit": false
+        },
+        {
+          "page": 551,
+          "seconds": 3.7933179999963613,
+          "cache_hit": false
+        },
+        {
+          "page": 552,
+          "seconds": 4.008050999997067,
+          "cache_hit": false
+        },
+        {
+          "page": 553,
+          "seconds": 4.123077800002648,
+          "cache_hit": false
+        },
+        {
+          "page": 554,
+          "seconds": 3.7259625000006054,
+          "cache_hit": false
+        },
+        {
+          "page": 555,
+          "seconds": 4.118639799999073,
+          "cache_hit": false
+        },
+        {
+          "page": 556,
+          "seconds": 4.007339100004174,
+          "cache_hit": false
+        },
+        {
+          "page": 557,
+          "seconds": 4.3170493000070564,
+          "cache_hit": false
+        },
+        {
+          "page": 558,
+          "seconds": 3.9792467999941437,
+          "cache_hit": false
+        },
+        {
+          "page": 559,
+          "seconds": 4.244446600001538,
+          "cache_hit": false
+        },
+        {
+          "page": 560,
+          "seconds": 3.6952692000049865,
+          "cache_hit": false
+        },
+        {
+          "page": 561,
+          "seconds": 5.475239400009741,
+          "cache_hit": false
+        },
+        {
+          "page": 562,
+          "seconds": 5.691130300008808,
+          "cache_hit": false
+        },
+        {
+          "page": 563,
+          "seconds": 4.087890299997525,
+          "cache_hit": false
+        },
+        {
+          "page": 564,
+          "seconds": 4.031193100003293,
+          "cache_hit": false
+        },
+        {
+          "page": 565,
+          "seconds": 4.026457300002221,
+          "cache_hit": false
+        },
+        {
+          "page": 566,
+          "seconds": 4.0809363999869674,
+          "cache_hit": false
+        },
+        {
+          "page": 567,
+          "seconds": 3.746706299993093,
+          "cache_hit": false
+        },
+        {
+          "page": 568,
+          "seconds": 4.379725499995402,
+          "cache_hit": false
+        },
+        {
+          "page": 569,
+          "seconds": 3.9174305999913486,
+          "cache_hit": false
+        },
+        {
+          "page": 570,
+          "seconds": 3.8424465999996755,
+          "cache_hit": false
+        },
+        {
+          "page": 571,
+          "seconds": 3.5282311999908416,
+          "cache_hit": false
+        },
+        {
+          "page": 572,
+          "seconds": 3.937689300000784,
+          "cache_hit": false
+        },
+        {
+          "page": 573,
+          "seconds": 4.65448219999962,
+          "cache_hit": false
+        },
+        {
+          "page": 574,
+          "seconds": 4.663330700001097,
+          "cache_hit": false
+        },
+        {
+          "page": 597,
+          "seconds": 4.579399399997783,
+          "cache_hit": false
+        },
+        {
+          "page": 650,
+          "seconds": 4.716652100003557,
+          "cache_hit": false
+        },
+        {
+          "page": 730,
+          "seconds": 4.515656000003219,
+          "cache_hit": false
+        }
+      ],
+      "rss_bytes": 617451520
+    }
+  },
+  {
+    "model": "PP-DocLayout-S",
+    "pages": 60,
+    "median_seconds": 1.8321637000044575,
+    "p95_seconds": 3.195389600005001,
+    "sum_seconds": 119.14362160002929,
+    "regions": 159,
+    "accuracy": "requires independent source annotations",
+    "runtime": {
+      "packages": {
+        "paddleocr": "3.7.0",
+        "paddlepaddle": "3.3.1",
+        "paddlex": "3.7.2",
+        "rapidocr": "3.10.0",
+        "onnxruntime": "1.24.4"
+      },
+      "weights_sha256": {
+        "PaddleOCR-VL-1.6\\added_tokens.json": "f59f889088e0fe21c523e7cf121bb6dca3b0bb148cb7159fbb4572c74dfc5644",
+        "PaddleOCR-VL-1.6\\config.json": "ce7f4565f8b1db78532ad5d1b9ebe55c2139d49bd4cb04778b580a08a598f171",
+        "PaddleOCR-VL-1.6\\generation_config.json": "a6701d78ab3b4d972307cdec3b69d4c13f46e0d5140514f50ab7d84259324b94",
+        "PaddleOCR-VL-1.6\\inference.yml": "1587aece2d6442366efce34161d5f7d5f67f09ebfbf043168e5fade892c2780e",
+        "PaddleOCR-VL-1.6\\preprocessor_config.json": "111872ab1e8bb7fd040ac5087bfced7ab8f011f02139b088cba294964c3b1d0e",
+        "PaddleOCR-VL-1.6\\processor_config.json": "1568858960a9760c54431dae693a6152e601ff55cdf6d2eab97a4a99958faea0",
+        "PaddleOCR-VL-1.6\\special_tokens_map.json": "d3a125c03103deb2acaf7730791bdbbf196f620e5a2213b664511ff9b4b25bab",
+        "PaddleOCR-VL-1.6\\tokenizer.json": "c8a215a59183d0d0781adc33bacd3ce6162716f7fd568fb30234a74d69803a7d",
+        "PaddleOCR-VL-1.6\\tokenizer_config.json": "1f979337347cc0cb72a6282d8a23ed183539aa81a87a906f022aee2bab83c7c5",
+        "PP-DocLayout-S\\inference.json": "ac09e931895d4c442e5379ab3b7e9b583baf288e816ab7675ca519da9eb2a9d7",
+        "PP-DocLayout-S\\inference.pdiparams": "491c3382d84ca04d2033afbee0c105942ed82fea392bb4a19170646adebe088a",
+        "PP-DocLayout-S\\inference.yml": "6f690098c438214c67822239a568f0bc2bbe97a8f02fba93e492d4f2c47523c3",
+        "PP-DocLayout_plus-L\\inference.json": "99bd09c0a1b9e88d35c65c305b91711d98055fc94b4a6eecd50da02e04729384",
+        "PP-DocLayout_plus-L\\inference.pdiparams": "24ca3e2e442164505e250deef59f7ee9a54ea12dd32875c9cd6155d959dc97da",
+        "PP-DocLayout_plus-L\\inference.yml": "d60f782a16f96afb27e8280399899a94c3e9ffc694ffb2f913ea00af1c522f1e",
+        "PP-LCNet_x1_0_doc_ori\\config.json": "e49f6be2fe4034232b05fb80d983a7b9bde4592d4a52812129c9a348057d3147",
+        "PP-LCNet_x1_0_doc_ori\\inference.json": "3580978602f309c3554508dd85d4fe09b73a7e0d80d7f9e63258f5b72c390c69",
+        "PP-LCNet_x1_0_doc_ori\\inference.pdiparams": "e8d6e7c5d264507e40e58a655779059d616b20d7441ea22047d829eb3931989c",
+        "PP-LCNet_x1_0_doc_ori\\inference.yml": "9e195eb729a8173588cd0e8a852c8b373aa606e79e77b4ac7d8346f5426caf26",
+        "PP-LCNet_x1_0_table_cls\\inference.json": "43401e76ed7b0e34787533016ea4ec9193d5b5964c3f948991fc5b531651ef33",
+        "PP-LCNet_x1_0_table_cls\\inference.pdiparams": "d0224afd9cfddf22da17407c6c78491baaa1f25922fbb312c9b0d2037c802db0",
+        "PP-LCNet_x1_0_table_cls\\inference.yml": "891b1f4b0ccddaf6aca0fce8c8a38e5ab5da9f62fb9adaa7c75e161ee03bb787",
+        "RT-DETR-L_wired_table_cell_det\\inference.json": "abea237f1e53d3dc3bf7ea1321dfebe78552a6070e567dfc94028b622fd575e8",
+        "RT-DETR-L_wired_table_cell_det\\inference.pdiparams": "357321c2845f0a035e8d118622649685a3cdb89d28b09a64e45a5a3df7a9fedc",
+        "RT-DETR-L_wired_table_cell_det\\inference.yml": "edf6d6180f2b9e3e666c744ee5ded38a72c6ef9056cd193250e3e55ba268acef",
+        "RT-DETR-L_wireless_table_cell_det\\inference.json": "abea237f1e53d3dc3bf7ea1321dfebe78552a6070e567dfc94028b622fd575e8",
+        "RT-DETR-L_wireless_table_cell_det\\inference.pdiparams": "c0f8c9ea07be8916ece73a8acf807bd21aed3ef11969b319c2dccb2406774c34",
+        "RT-DETR-L_wireless_table_cell_det\\inference.yml": "f2d0f00ea42aacc162f72a35cf54330e392a7d669e9a1b43896d3bd77a512621",
+        "SLANet_plus\\inference.json": "aba91cd956f4a1648b0f89df94c3cf8acaa066b47e2b689d109843b40d8545a2",
+        "SLANet_plus\\inference.pdiparams": "012986b0e2bfe90410618bfb4b7cf4fcb6c978caefd84c63c2934f8387b09ab8",
+        "SLANet_plus\\inference.yml": "8a6372d3269a6f112fe13a2da7952a84da6e112c10a3146cbb43de5bd01d19fa",
+        "SLANeXt_wired\\inference.json": "5b872f08e74f628ca1db8405db147e82e6e0c7cb358e101fd01cdafc946632d8",
+        "SLANeXt_wired\\inference.pdiparams": "ff0362a30f707fa7d27d8453c4396b992fca287377a42d01515bca6eeb3908f5",
+        "SLANeXt_wired\\inference.yml": "abbbd1b4dc6b1a2e9cd34c035514da53a1a6b1ec267292b0b8802025650a33bf",
+        "SLANeXt_wireless\\inference.json": "5b872f08e74f628ca1db8405db147e82e6e0c7cb358e101fd01cdafc946632d8",
+        "SLANeXt_wireless\\inference.pdiparams": "6bf0568e24638491c75920954a92583d8c0d46aa76a2a635fb2fa666ffb618ff",
+        "SLANeXt_wireless\\inference.yml": "58d1d7fdffd3e58cfec98571b817ea012f2107d644bd4f8e4607fae84f1923a6"
+      },
+      "model_load_seconds": {
+        "PP-DocLayout-S": 2.9529373999976087
+      },
+      "page_timings": [
+        {
+          "page": 1,
+          "seconds": 11.973011499998393,
+          "cache_hit": false
+        },
+        {
+          "page": 17,
+          "seconds": 0.5308208000060404,
+          "cache_hit": false
+        },
+        {
+          "page": 22,
+          "seconds": 0.5614992999908281,
+          "cache_hit": false
+        },
+        {
+          "page": 32,
+          "seconds": 0.601929199998267,
+          "cache_hit": false
+        },
+        {
+          "page": 35,
+          "seconds": 0.6675698000035482,
+          "cache_hit": false
+        },
+        {
+          "page": 40,
+          "seconds": 0.7595642999949632,
+          "cache_hit": false
+        },
+        {
+          "page": 57,
+          "seconds": 0.8759868000051938,
+          "cache_hit": false
+        },
+        {
+          "page": 80,
+          "seconds": 1.2945762999879662,
+          "cache_hit": false
+        },
+        {
+          "page": 100,
+          "seconds": 2.0675511000008555,
+          "cache_hit": false
+        },
+        {
+          "page": 130,
+          "seconds": 3.061061600004905,
+          "cache_hit": false
+        },
+        {
+          "page": 160,
+          "seconds": 1.852595200005453,
+          "cache_hit": false
+        },
+        {
+          "page": 199,
+          "seconds": 1.7256862000067485,
+          "cache_hit": false
+        },
+        {
+          "page": 250,
+          "seconds": 0.9075735999940662,
+          "cache_hit": false
+        },
+        {
+          "page": 300,
+          "seconds": 0.7063885000097798,
+          "cache_hit": false
+        },
+        {
+          "page": 331,
+          "seconds": 0.5504696999996668,
+          "cache_hit": false
+        },
+        {
+          "page": 400,
+          "seconds": 0.6301148999918951,
+          "cache_hit": false
+        },
+        {
+          "page": 470,
+          "seconds": 0.8109256000025198,
+          "cache_hit": false
+        },
+        {
+          "page": 535,
+          "seconds": 2.014795299997786,
+          "cache_hit": false
+        },
+        {
+          "page": 536,
+          "seconds": 3.1433270999987144,
+          "cache_hit": false
+        },
+        {
+          "page": 537,
+          "seconds": 3.195389600005001,
+          "cache_hit": false
+        },
+        {
+          "page": 538,
+          "seconds": 3.4088008000107948,
+          "cache_hit": false
+        },
+        {
+          "page": 539,
+          "seconds": 2.7160705999995116,
+          "cache_hit": false
+        },
+        {
+          "page": 540,
+          "seconds": 1.1619380000047386,
+          "cache_hit": false
+        },
+        {
+          "page": 541,
+          "seconds": 1.2381773000088288,
+          "cache_hit": false
+        },
+        {
+          "page": 542,
+          "seconds": 1.1406550999963656,
+          "cache_hit": false
+        },
+        {
+          "page": 543,
+          "seconds": 1.4602913999988232,
+          "cache_hit": false
+        },
+        {
+          "page": 544,
+          "seconds": 1.551245700000436,
+          "cache_hit": false
+        },
+        {
+          "page": 545,
+          "seconds": 1.241872799990233,
+          "cache_hit": false
+        },
+        {
+          "page": 546,
+          "seconds": 0.9171672000084072,
+          "cache_hit": false
+        },
+        {
+          "page": 547,
+          "seconds": 0.8974331000063103,
+          "cache_hit": false
+        },
+        {
+          "page": 548,
+          "seconds": 1.1417052000033436,
+          "cache_hit": false
+        },
+        {
+          "page": 549,
+          "seconds": 2.6116642999986652,
+          "cache_hit": false
+        },
+        {
+          "page": 550,
+          "seconds": 3.2494662999961292,
+          "cache_hit": false
+        },
+        {
+          "page": 551,
+          "seconds": 2.9245240000018384,
+          "cache_hit": false
+        },
+        {
+          "page": 552,
+          "seconds": 3.12198840000201,
+          "cache_hit": false
+        },
+        {
+          "page": 553,
+          "seconds": 2.4373140999960015,
+          "cache_hit": false
+        },
+        {
+          "page": 554,
+          "seconds": 2.3415887000010116,
+          "cache_hit": false
+        },
+        {
+          "page": 555,
+          "seconds": 2.5736864999926183,
+          "cache_hit": false
+        },
+        {
+          "page": 556,
+          "seconds": 2.668568499997491,
+          "cache_hit": false
+        },
+        {
+          "page": 557,
+          "seconds": 2.7373918000084814,
+          "cache_hit": false
+        },
+        {
+          "page": 558,
+          "seconds": 2.1557928000111133,
+          "cache_hit": false
+        },
+        {
+          "page": 559,
+          "seconds": 2.345618599996669,
+          "cache_hit": false
+        },
+        {
+          "page": 560,
+          "seconds": 1.8321637000044575,
+          "cache_hit": false
+        },
+        {
+          "page": 561,
+          "seconds": 2.6055638999969233,
+          "cache_hit": false
+        },
+        {
+          "page": 562,
+          "seconds": 2.1245202999998583,
+          "cache_hit": false
+        },
+        {
+          "page": 563,
+          "seconds": 2.6056296000024304,
+          "cache_hit": false
+        },
+        {
+          "page": 564,
+          "seconds": 2.4606707000057213,
+          "cache_hit": false
+        },
+        {
+          "page": 565,
+          "seconds": 2.480448600006639,
+          "cache_hit": false
+        },
+        {
+          "page": 566,
+          "seconds": 2.3112401999969734,
+          "cache_hit": false
+        },
+        {
+          "page": 567,
+          "seconds": 1.643010100000538,
+          "cache_hit": false
+        },
+        {
+          "page": 568,
+          "seconds": 1.7996572999982163,
+          "cache_hit": false
+        },
+        {
+          "page": 569,
+          "seconds": 1.9055564999871422,
+          "cache_hit": false
+        },
+        {
+          "page": 570,
+          "seconds": 1.8043225000001257,
+          "cache_hit": false
+        },
+        {
+          "page": 571,
+          "seconds": 1.4368161000020336,
+          "cache_hit": false
+        },
+        {
+          "page": 572,
+          "seconds": 1.6800199999997858,
+          "cache_hit": false
+        },
+        {
+          "page": 573,
+          "seconds": 3.011942800003453,
+          "cache_hit": false
+        },
+        {
+          "page": 574,
+          "seconds": 2.581110200000694,
+          "cache_hit": false
+        },
+        {
+          "page": 597,
+          "seconds": 1.0438174000009894,
+          "cache_hit": false
+        },
+        {
+          "page": 650,
+          "seconds": 1.0996917000011308,
+          "cache_hit": false
+        },
+        {
+          "page": 730,
+          "seconds": 0.743642399989767,
+          "cache_hit": false
+        }
+      ],
+      "rss_bytes": 457224192
+    }
+  }
+]

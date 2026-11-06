@@ -175,8 +175,10 @@ class IiifBuilder:
         )
 
         from src.ingest.footnotes import page_bundle as footnote_bundle
+        from src.graphics.service import page_graphics
         return {
             **footnote_bundle(self.session, canvas.id),
+            "graphics": page_graphics(self.session,canvas.id),
             "page_id": canvas.id,
             "manifest_id": canvas.manifest_id,
             "revision": canvas.revision_no,

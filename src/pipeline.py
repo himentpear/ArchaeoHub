@@ -46,7 +46,7 @@ def _backup_database(output: Path) -> Path:
 def run_document(pdf: Path, output: Path, *, max_pages: int | None = None,
                  dpi: int = 180, threads: int = 4, base_url: str = "http://127.0.0.1:8000/iiif",
                  stop_after: int | None = None, settings_path: Path | None = None,
-                 rebuild_index: bool = False, skip_models: bool = False) -> dict:
+                 rebuild_index: bool = False, skip_models: bool = False, graphics_front_dir: Path | None = None) -> dict:
     import pymupdf
     pdf, output = pdf.resolve(), output.resolve()
     if max_pages is not None and max_pages < 1:
@@ -104,7 +104,7 @@ def run_document(pdf: Path, output: Path, *, max_pages: int | None = None,
             if existing_work:
                 state["pre_reindex_backup"]=str(_backup_database(output))
             pages = []
-            extractor = PageExtractor(run_dir, dpi, threads)
+            extractor = PageExtractor(run_dir, dpi, threads, graphics_front_dir=graphics_front_dir)
             with pymupdf.open(pdf) as document:
                 total = min(len(document), max_pages) if max_pages else len(document)
                 state["total_pages"] = total

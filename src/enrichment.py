@@ -31,7 +31,7 @@ def graphic_regions(image_path: str, lines, width_pt: float) -> list[list[float]
     regions=[]
     for contour in contours:
         x,y,w,h=cv2.boundingRect(contour)
-        if w>25*scale and h>25*scale and w*h>mask.size*0.002 and w*h<mask.size*0.65:
+        if w>25*scale and h>25*scale and w*h>mask.size*0.002:
             regions.append([x/scale,y/scale,w/scale,h/scale])
     return regions
 
@@ -129,7 +129,7 @@ def enrich_document(session, manifest_id: str, pages, run_dir: Path, base_url: s
             blocks=list(session.scalars(select(AltoBlock).where(AltoBlock.canvas_id==canvas.id).order_by(AltoBlock.reading_order)))
             for block in blocks:
                 text=block.resolve_display_text() or ""
-                if block.page_zone != "print_space" or not text or block.block_type=="footnote_candidate":
+                if block.page_zone != "print_space" or not text or block.block_type in {"footnote_candidate","table","graphic_text"}:
                     continue
                 chunk=RagChunk(manifest_id=manifest_id,chunk_index=chunk_count,breadcrumb_path=canvas.page_domain+("/footnote" if block.block_type=="footnote" else ""),
                     content_text=text,token_count=len(text))

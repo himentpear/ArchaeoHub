@@ -1,0 +1,36 @@
+{
+  "run_id": "fd2c0b06-8b8b-4470-aaf3-ebb52085ca5c",
+  "published": false,
+  "accuracy": "not measured; independent annotations required",
+  "implementation_hash": "1dc09f7d1087c9f3037995fd9c329108a01a9cc86d1c1fd004775a21cd3585ce",
+  "wall_seconds": 160.29210120000062,
+  "peak_rss_mib": 2066.3984375,
+  "first_page_wall_seconds": 37.295851700007915,
+  "model_load_seconds": {
+    "PP-DocLayout_plus-L": 2.5638886999950046,
+    "PP-LCNet_x1_0_doc_ori": 0.0470225000026403,
+    "SLANet_plus": 0.12986529999761842,
+    "PP-LCNet_x1_0_table_cls": 0.04662940000707749,
+    "SLANeXt_wired": 0.884730399993714,
+    "RT-DETR-L_wired_table_cell_det": 0.7578603000001749
+  },
+  "cache_hits": 0,
+  "page_groups": {
+    "no_detected_graphic": {
+      "pages": 0
+    },
+    "table_page": {
+      "pages": 5,
+      "mean_seconds": 31.869814179997775,
+      "median_seconds": 33.42009079999116,
+      "p95_seconds": 38.46570929999871
+    },
+    "figure_or_chart_page": {
+      "pages": 0
+    }
+  },
+  "detected_regions": 7,
+  "local_structure_review_candidates": 3,
+  "review_fraction": 0.42857142857142855,
+  "sampling_note": "Purposeful appendix-heavy sample; not a random estimate of the whole book. CPU contention may affect times."
+}

@@ -1,0 +1,416 @@
+{
+  "dataset": "synthetic, not historical scan accuracy",
+  "seed": 20261031,
+  "positive_cases": 5,
+  "negative_cases": 20,
+  "recall": 1.0,
+  "false_merges": 0,
+  "passed": true,
+  "cases": [
+    {
+      "id": "overlap-0",
+      "positive": true,
+      "result": {
+        "accepted": true,
+        "method": "sift_similarity",
+        "inliers": 1431,
+        "inlier_ratio": 1.0,
+        "overlap": 0.5000000064308256,
+        "first_to_composite": [
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "second_to_composite": [
+          [
+            1.000000010856254,
+            -1.9690297058104324e-07,
+            300.000024874635
+          ],
+          [
+            1.9690297058104324e-07,
+            1.000000010856254,
+            0.9999708365003449
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "seam": "average_only_in_verified_overlap",
+        "missing_pixels": 2202
+      }
+    },
+    {
+      "id": "overlap-1",
+      "positive": true,
+      "result": {
+        "accepted": true,
+        "method": "sift_similarity",
+        "inliers": 1463,
+        "inlier_ratio": 1.0,
+        "overlap": 0.500000025431315,
+        "first_to_composite": [
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "second_to_composite": [
+          [
+            1.0000002843730351,
+            1.6587697344199482e-07,
+            299.99995138488345
+          ],
+          [
+            -1.6587697344199482e-07,
+            1.0000002843730351,
+            0.9999852342718102
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "seam": "average_only_in_verified_overlap",
+        "missing_pixels": 2202
+      }
+    },
+    {
+      "id": "overlap-2",
+      "positive": true,
+      "result": {
+        "accepted": true,
+        "method": "sift_similarity",
+        "inliers": 1489,
+        "inlier_ratio": 1.0,
+        "overlap": 0.49999996280491116,
+        "first_to_composite": [
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "second_to_composite": [
+          [
+            0.9999999916590508,
+            2.9661064981892763e-07,
+            299.9999419972824
+          ],
+          [
+            -2.9661064981892763e-07,
+            0.9999999916590508,
+            1.000040924902796
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "seam": "average_only_in_verified_overlap",
+        "missing_pixels": 2202
+      }
+    },
+    {
+      "id": "overlap-3",
+      "positive": true,
+      "result": {
+        "accepted": true,
+        "method": "sift_similarity",
+        "inliers": 1490,
+        "inlier_ratio": 1.0,
+        "overlap": 0.5,
+        "first_to_composite": [
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "second_to_composite": [
+          [
+            1.0000001650815322,
+            9.134036443596223e-08,
+            299.9999801848515
+          ],
+          [
+            -9.134036443596223e-08,
+            1.0000001650815322,
+            0.9999830993597415
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "seam": "average_only_in_verified_overlap",
+        "missing_pixels": 2202
+      }
+    },
+    {
+      "id": "overlap-4",
+      "positive": true,
+      "result": {
+        "accepted": true,
+        "method": "sift_similarity",
+        "inliers": 1440,
+        "inlier_ratio": 1.0,
+        "overlap": 0.4999997554130118,
+        "first_to_composite": [
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "second_to_composite": [
+          [
+            0.9999996515453103,
+            7.525418972110896e-07,
+            299.9998928794962
+          ],
+          [
+            -7.525418972110896e-07,
+            0.9999996515453103,
+            1.0002312398627689
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "seam": "average_only_in_verified_overlap",
+        "missing_pixels": 1800
+      }
+    },
+    {
+      "id": "negative-0",
+      "positive": false,
+      "result": {
+        "accepted": false,
+        "reason": "insufficient_matches"
+      }
+    },
+    {
+      "id": "negative-1",
+      "positive": false,
+      "result": {
+        "accepted": false,
+        "reason": "insufficient_matches"
+      }
+    },
+    {
+      "id": "negative-2",
+      "positive": false,
+      "result": {
+        "accepted": false,
+        "reason": "insufficient_matches"
+      }
+    },
+    {
+      "id": "negative-3",
+      "positive": false,
+      "result": {
+        "accepted": false,
+        "reason": "insufficient_matches"
+      }
+    },
+    {
+      "id": "negative-4",
+      "positive": false,
+      "result": {
+        "accepted": false,
+        "reason": "insufficient_matches"
+      }
+    },
+    {
+      "id": "negative-5",
+      "positive": false,
+      "result": {
+        "accepted": false,
+        "reason": "insufficient_matches"
+      }
+    },
+    {
+      "id": "negative-6",
+      "positive": false,
+      "result": {
+        "accepted": false,
+        "reason": "insufficient_matches"
+      }
+    },
+    {
+      "id": "negative-7",
+      "positive": false,
+      "result": {
+        "accepted": false,
+        "reason": "insufficient_matches"
+      }
+    },
+    {
+      "id": "negative-8",
+      "positive": false,
+      "result": {
+        "accepted": false,
+        "reason": "insufficient_matches"
+      }
+    },
+    {
+      "id": "negative-9",
+      "positive": false,
+      "result": {
+        "accepted": false,
+        "reason": "insufficient_matches"
+      }
+    },
+    {
+      "id": "negative-10",
+      "positive": false,
+      "result": {
+        "accepted": false,
+        "reason": "missing_or_duplicate_overlap",
+        "overlap": 1.0
+      }
+    },
+    {
+      "id": "negative-11",
+      "positive": false,
+      "result": {
+        "accepted": false,
+        "reason": "missing_or_duplicate_overlap",
+        "overlap": 1.0
+      }
+    },
+    {
+      "id": "negative-12",
+      "positive": false,
+      "result": {
+        "accepted": false,
+        "reason": "missing_or_duplicate_overlap",
+        "overlap": 1.0
+      }
+    },
+    {
+      "id": "negative-13",
+      "positive": false,
+      "result": {
+        "accepted": false,
+        "reason": "missing_or_duplicate_overlap",
+        "overlap": 1.0
+      }
+    },
+    {
+      "id": "negative-14",
+      "positive": false,
+      "result": {
+        "accepted": false,
+        "reason": "missing_or_duplicate_overlap",
+        "overlap": 1.0
+      }
+    },
+    {
+      "id": "negative-15",
+      "positive": false,
+      "result": {
+        "accepted": false,
+        "reason": "missing_or_duplicate_overlap",
+        "overlap": 1.0
+      }
+    },
+    {
+      "id": "negative-16",
+      "positive": false,
+      "result": {
+        "accepted": false,
+        "reason": "missing_or_duplicate_overlap",
+        "overlap": 1.0
+      }
+    },
+    {
+      "id": "negative-17",
+      "positive": false,
+      "result": {
+        "accepted": false,
+        "reason": "missing_or_duplicate_overlap",
+        "overlap": 1.0
+      }
+    },
+    {
+      "id": "negative-18",
+      "positive": false,
+      "result": {
+        "accepted": false,
+        "reason": "missing_or_duplicate_overlap",
+        "overlap": 1.0
+      }
+    },
+    {
+      "id": "negative-19",
+      "positive": false,
+      "result": {
+        "accepted": false,
+        "reason": "missing_or_duplicate_overlap",
+        "overlap": 1.0
+      }
+    }
+  ]
+}

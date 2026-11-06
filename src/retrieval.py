@@ -38,6 +38,10 @@ def retrieve(session,manifest_id: str,question: str,limit: int=5):
         anchor=session.scalar(select(ProvenanceAnchor).where(ProvenanceAnchor.source_entity_type=="rag_chunk",
             ProvenanceAnchor.source_entity_id==chunk.id))
         if anchor:
+            from src.graphics.context import published_regions,covered
+            regions=published_regions(session,anchor.canvas_id)
+            if any(covered([float(v) for v in box['xywh'].split(',')],regions) for box in anchor.highlight_boxes if box.get('xywh')):
+                continue
             hits.append({"chunk_id":chunk.id,"text":chunk.content_text,"score":round(score,4),
                 "printed_page":anchor.printed_page,"canvas_id":anchor.canvas_id,
                 "target":anchor.iiif_target_uri,"boxes":anchor.highlight_boxes})

@@ -1,0 +1,15 @@
+{
+  "run_id": "fd2c0b06-8b8b-4470-aaf3-ebb52085ca5c",
+  "scope": "warm reuse of exact final request; no recognition models reloaded; interpreter startup excluded",
+  "cache_hits": 5,
+  "pages": 5,
+  "wall_seconds": 0.9248206999909598,
+  "per_page_wall_seconds": [
+    0.0034739999973680824,
+    0.0029396000027190894,
+    0.019004899993888102,
+    0.013816599996061996,
+    0.02223740000044927
+  ],
+  "peak_rss_mib": 57.5703125
+}

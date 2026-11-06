@@ -1,0 +1,37 @@
+{
+  "run_id": "0aa002a7-dcb1-48e0-aff0-3f57ffea2c8e",
+  "annotation_path": "D:\\Documents\\Github\\PKU-LM-Humanities-Data-Lab\\data\\processed\\benchmarks\\graphics-60-annotations.json",
+  "annotations_complete": false,
+  "passed": false,
+  "gates": {
+    "annotations": false,
+    "detection_precision": false,
+    "detection_recall": false,
+    "table_structure": false,
+    "cell_metrics_reported": false,
+    "source_coverage": true,
+    "logical_grouping": false,
+    "stitching": false,
+    "direction": false
+  },
+  "scored_test_pages": 0,
+  "metrics_status": "unannotated",
+  "detection": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "precision": null,
+    "recall": null
+  },
+  "TEDS_structure": null,
+  "tables_scored": 0,
+  "cell_source_coverage": 1.0,
+  "grouping": {
+    "positive_cases": 0,
+    "negative_cases": 0,
+    "recall": 0.0,
+    "false_merges": 0
+  },
+  "cell_accuracy": {},
+  "source_errors": []
+}

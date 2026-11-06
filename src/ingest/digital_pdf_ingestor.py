@@ -105,6 +105,7 @@ class ExtractedPageData:
     image_path: Optional[str] = None
     graphics: list[list[float]] = field(default_factory=list)
     quality_issues: list[str] = field(default_factory=list)
+    regions: list[dict] = field(default_factory=list)
 
 
 class DigitalPdfIngestor:
@@ -306,9 +307,16 @@ class DigitalPdfIngestor:
             self.session.add(alto_page)
 
             from src.ingest.footnotes import detect as detect_footnotes, persist as persist_footnotes
-            footnote_plan = detect_footnotes(ep)
+            from src.graphics.geometry import coverage
+            graphic_groups={}
+            for i,line in enumerate(ep.lines):
+                line_box=[line.x_pt,line.y_top_pt,line.x_pt+line.w_pt,line.y_top_pt+line.h_pt]
+                for r in ep.regions:
+                    if coverage(line_box,r['bbox_pt'])>=.8:
+                        graphic_groups[i]=(r['category'],r['key']);break
+            footnote_plan = detect_footnotes(ep,excluded_indices=set(graphic_groups))
             line_indices = {id(line): i for i,line in enumerate(ep.lines)}
-            grouped_blocks = self._group_lines_into_blocks(ep.lines, ep.width_pt, ep.height_pt, footnote_plan.groups)
+            grouped_blocks = self._group_lines_into_blocks(ep.lines, ep.width_pt, ep.height_pt, footnote_plan.groups,graphic_groups)
             footnote_lines = {}
 
             for b_idx, (block_type, page_zone, b_lines) in enumerate(grouped_blocks, start=1):
@@ -355,7 +363,7 @@ class DigitalPdfIngestor:
                 all_blocks.append(alto_block)
 
                 # Check if this block is a heading in body/front_matter (excluding TOC dotted lines)
-                if block_type != "footnote" and page_zone == "print_space" and canvas.page_domain in {"body", "appendix"}:
+                if block_type not in {"footnote","table","graphic_text"} and page_zone == "print_space" and canvas.page_domain in {"body", "appendix"}:
                     first_line_str = b_lines[0].text.strip()
                     if "……" not in first_line_str and ".." not in first_line_str:
                         h_match = self._match_heading(first_line_str, b_lines[0].font_size)
@@ -369,7 +377,7 @@ class DigitalPdfIngestor:
                 # Check if this block is a figure caption (in body pages, not TOC)
                 cap_m = (
                     FIGURE_CAPTION_LINE_RE.match(b_lines[0].text.strip())
-                    if block_type != "footnote" and canvas.page_domain in {"body", "plate", "appendix"}
+                    if block_type not in {"footnote","table","graphic_text"} and canvas.page_domain in {"body", "plate", "appendix"}
                     else None
                 )
                 if cap_m and "……" not in block_text:
@@ -446,7 +454,7 @@ class DigitalPdfIngestor:
                         )
 
                     # Extract Artifact specimens mentioned in this line (exclude TOC listing pages)
-                    if canvas.page_domain == "toc":
+                    if canvas.page_domain == "toc" or block_type in {"table","graphic_text"}:
                         continue
                     for sp in l_spans:
                         if sp["type"] == "ARTIFACT_ID":
@@ -626,7 +634,7 @@ class DigitalPdfIngestor:
         return None, "body"
 
     def _group_lines_into_blocks(
-        self, lines: list[ExtractedLine], _w_pt: float, h_pt: float, note_groups: dict | None = None
+        self, lines: list[ExtractedLine], _w_pt: float, h_pt: float, note_groups: dict | None = None, graphic_groups: dict | None = None
     ) -> list[tuple[str, str, list[ExtractedLine]]]:
         if not lines:
             return []
@@ -635,9 +643,12 @@ class DigitalPdfIngestor:
         curr_lines: list[ExtractedLine] = []
         curr_zone = "print_space"
         note_groups = note_groups or {}
+        graphic_groups = graphic_groups or {}
         line_index = {id(line): i for i,line in enumerate(lines)}
 
         def block_type():
+            graphic=graphic_groups.get(line_index[id(curr_lines[0])])
+            if graphic:return "table" if graphic[0]=='table' else "graphic_text"
             if line_index[id(curr_lines[0])] in note_groups:
                 return "footnote"
             return "running_header" if curr_zone == "margin_top" else "paragraph"
@@ -661,6 +672,7 @@ class DigitalPdfIngestor:
             is_new_para = (
                 z != curr_zone
                 or note_groups.get(line_index[id(ln)]) != note_groups.get(line_index[id(prev)])
+                or graphic_groups.get(line_index[id(ln)]) != graphic_groups.get(line_index[id(prev)])
                 or v_gap > max(10.0, prev.h_pt * 0.85)
                 or abs(ln.font_size - prev.font_size) >= 1.8
                 or any(p.match(ln.text.strip()) for _, p in self.heading_rules)

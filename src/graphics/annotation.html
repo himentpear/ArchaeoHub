@@ -1,0 +1,22 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><title>图表独立标注</title>
+<style>body{font:15px system-ui;margin:20px;color:#243044}header{display:flex;gap:12px;align-items:center;flex-wrap:wrap}main{display:grid;grid-template-columns:3fr 2fr;gap:20px;margin-top:15px}#source{position:relative;align-self:start}img{display:block;width:100%}svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none}rect{fill:#ffbd3c22;stroke:#c87500;stroke-width:3}textarea{width:100%;box-sizing:border-box;font:13px monospace;height:56vh}button{padding:8px}#status{color:#954800}details textarea{height:25vh}</style>
+<header><h2>图表独立标注</h2><button id="prev">上一页</button><select id="pages" aria-label="选择物理页"></select><button id="next">下一页</button><button id="save">保存标注</button><span id="status"></span></header>
+<p>只展示原图，不预填模型输出。在原图拖框添加对象，再核对分类、方向、表格 HTML 和 cell_checks。无图表页也需人工确认；不要把空列表直接视为负例。</p>
+<main><div id="source"><img id="image" alt="独立标注原图"><svg id="overlay"></svg></div><section><p id="info"></p><label>标注者 <input id="reviewer"></label><label><input type="checkbox" id="reviewed">本页已独立核验</label><p>对象 JSON（Canvas 坐标，x0,y0,x1,y1）</p><textarea id="objects" spellcheck="false" aria-label="对象标注JSON"></textarea><details><summary>跨页关系 JSON</summary><textarea id="relations" spellcheck="false"></textarea></details></section></main>
+<script>
+let data,sizes,version,index=0,start=null,draft=null,dirty=false;
+const el=id=>document.getElementById(id);
+const status=text=>el('status').textContent=text;
+async function request(url,options){let r=await fetch(url,options),v=await r.json();if(!r.ok)throw Error(v.error);return v;}
+function draw(){let svg=el('overlay');svg.replaceChildren();let objects=JSON.parse(el('objects').value);for(let obj of objects){let [x,y,x1,y1]=obj.bbox;let r=document.createElementNS('http://www.w3.org/2000/svg','rect');for(let [k,v] of Object.entries({x,y,width:x1-x,height:y1-y}))r.setAttribute(k,v);svg.append(r);}}
+function show(){let p=data.pages[index],size=sizes[p.page];el('pages').value=index;el('image').src='/source?page='+p.page;el('overlay').setAttribute('viewBox','0 0 '+size.join(' '));el('objects').value=JSON.stringify(p.objects,null,2);el('reviewer').value=p.reviewer;el('reviewed').checked=p.reviewed;el('info').textContent='物理页 '+p.page+' · '+p.split+' · '+p.group_id+' · Canvas '+size.join('×');dirty=false;draw();}
+function move(i){if(i<0||i>=data.pages.length)return;if(dirty&&!confirm('当前修改尚未保存，切换会丢弃修改。继续？')){el('pages').value=index;return;}index=i;show();}
+el('prev').onclick=()=>move(index-1);el('next').onclick=()=>move(index+1);el('pages').onchange=()=>move(Number(el('pages').value));
+for(let name of ['objects','reviewer','reviewed','relations'])el(name).oninput=()=>{dirty=true;if(name==='objects'){try{draw();}catch{status('对象 JSON 尚未完成');}}};
+function point(e){let b=el('overlay').getBoundingClientRect(),[w,h]=sizes[data.pages[index].page];return [Math.max(0,Math.min(w,(e.clientX-b.left)/b.width*w)),Math.max(0,Math.min(h,(e.clientY-b.top)/b.height*h))].map(Math.round);}
+el('overlay').onpointerdown=e=>{start=point(e);el('overlay').setPointerCapture(e.pointerId);};
+el('overlay').onpointerup=e=>{if(!start)return;let end=point(e),[x,y]=start;start=null;if(Math.abs(x-end[0])<5||Math.abs(y-end[1])<5)return;try{let objects=JSON.parse(el('objects').value),p=data.pages[index].page;objects.push({id:'p'+p+'-object-'+Date.now(),category:'table',bbox:[Math.min(x,end[0]),Math.min(y,end[1]),Math.max(x,end[0]),Math.max(y,end[1])],orientation:0});el('objects').value=JSON.stringify(objects,null,2);dirty=true;draw();}catch(error){status(error.message);}};
+el('save').onclick=async()=>{try{let fields={reviewer:el('reviewer').value,reviewed:el('reviewed').checked,objects:JSON.parse(el('objects').value)},relations=JSON.parse(el('relations').value);let v=await request('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({version,page:data.pages[index].page,fields,relations})});version=v.version;Object.assign(data.pages[index],fields);data.relations=relations;dirty=false;status('已保存第 '+v.saved+' 页；这不是模型验收通过标志。');}catch(error){status(error.message);}};
+request('/api/annotations').then(v=>{({data,sizes,version}=v);data.pages.forEach((p,i)=>el('pages').append(new Option(p.page+' · '+p.split,i)));el('relations').value=JSON.stringify(data.relations||[],null,2);show();}).catch(e=>status(e.message));
+window.onbeforeunload=e=>{if(dirty){e.preventDefault();e.returnValue='';}};
+</script></html>

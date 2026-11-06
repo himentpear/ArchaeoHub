@@ -1,0 +1,36 @@
+{
+  "scope": "incremental graphics stage only; source OCR already cached; no VL/API review",
+  "pages": 793,
+  "table_page_seconds": 31.869814179997775,
+  "non_table_seconds_range": [
+    3.682780666665834,
+    4.838437960002921
+  ],
+  "not_a_measured_book_run": true,
+  "assumptions": "Table counts are scenarios, not measured source truth. Baseline and final focus have different code hashes and CPU contention; allow additional margin.",
+  "scenarios": [
+    {
+      "assumed_table_pages": 40,
+      "minutes_range": [
+        67.4654401533214,
+        81.96893918470184
+      ]
+    },
+    {
+      "assumed_table_pages": 80,
+      "minutes_range": [
+        86.25679582887602,
+        99.98985666469841
+      ]
+    },
+    {
+      "assumed_table_pages": 160,
+      "minutes_range": [
+        123.83950717998528,
+        136.03169162469155
+      ]
+    }
+  ],
+  "optional_vl_deadline_seconds_per_region": 120,
+  "optional_vl_max_regions": 12
+}

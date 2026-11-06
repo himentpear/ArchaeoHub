@@ -106,11 +106,22 @@ def native_quality(page, lines: list[ExtractedLine]) -> tuple[str, list[str]]:
 
 
 class PageExtractor:
-    def __init__(self, run_dir: Path, dpi: int = 180, threads: int = 4):
+    def __init__(self, run_dir: Path, dpi: int = 180, threads: int = 4, graphics_front_dir: Path | None = None):
         self.run_dir = run_dir
         self.dpi = dpi
         self.threads = threads
         self.ocr = None
+        self.graphics_front_dir=graphics_front_dir
+
+    def attach_regions(self,page):
+        if self.graphics_front_dir is None:return page
+        path=Path(self.graphics_front_dir)/f'{page.scan_index:05d}.json'
+        data=json.loads(path.read_text(encoding='utf8'))
+        if data['signature']['source_hash']!=file_hash(Path(page.image_path)):
+            raise ValueError('Graphic layout belongs to a different rendered source page')
+        sx=page.width_pt/data['image_size'][0];sy=page.height_pt/data['image_size'][1]
+        page.regions=[{'category':r['category'],'key':r['key'],'bbox_pt':[r['bbox'][0]*sx,r['bbox'][1]*sy,r['bbox'][2]*sx,r['bbox'][3]*sy]} for r in data['regions']]
+        return page
 
     def extract(self, document, index: int, source_sha256: str) -> ExtractedPageData:
         page = document[index]
@@ -127,7 +138,7 @@ class PageExtractor:
                     # source lines remain authoritative; derive hints again.
                     payload["detected_page_no_raw"], payload["layout_hint"] = DigitalPdfIngestor._detect_page_number_and_domain_hint(
                         index, payload["lines"], payload["height_pt"])
-                    return refine_graphic_page(ExtractedPageData(**payload))
+                    return self.attach_regions(refine_graphic_page(ExtractedPageData(**payload)))
             except (KeyError, ValueError, TypeError):
                 pass
         import pymupdf
@@ -152,13 +163,16 @@ class PageExtractor:
         for info in page.get_image_info():
             rect = pymupdf.Rect(info["bbox"]) * page.rotation_matrix
             rect &= page.rect
-            if not rect.is_empty and 0.01 < rect.get_area()/page.rect.get_area() < 0.65:
+            ratio=rect.get_area()/page.rect.get_area()
+            scan_container=route=='ocr' and ratio>=.95
+            if not rect.is_empty and ratio>0.01 and not scan_container:
                 graphics.append([rect.x0, rect.y0, rect.width, rect.height])
         label, hint = DigitalPdfIngestor._detect_page_number_and_domain_hint(index, lines, page.rect.height)
         result = ExtractedPageData(index+1, index, page.get_label(), page.rect.width,
                                    page.rect.height, len(page.get_images()), lines,
                                    label, hint, method, str(image.resolve()), graphics, issues)
         result=refine_graphic_page(result)
+        result=self.attach_regions(result)
         atomic_json(cache, {"signature": signature, "page": asdict(result), "route": route,
                             "image_sha256": file_hash(image), "elapsed_seconds": round(time.perf_counter()-started,3)})
         return result

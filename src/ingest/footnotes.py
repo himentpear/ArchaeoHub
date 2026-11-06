@@ -129,14 +129,16 @@ def separator_above(page, line) -> bool:
     return False
 
 
-def detect(page) -> Plan:
+def detect(page,excluded_indices=None) -> Plan:
     lines = page.lines
-    body_sizes = [l.font_size for l in lines if .12 < l.y_top_pt/page.height_pt < .72 and len(l.text)>12]
+    excluded_indices=excluded_indices or set()
+    body_sizes = [l.font_size for i,l in enumerate(lines) if i not in excluded_indices and .12 < l.y_top_pt/page.height_pt < .72 and len(l.text)>12]
     body_size = statistics.median(body_sizes) if body_sizes else 0
     # OCR often emits a tiny marker as a separate box to the LEFT of its
     # note. Associate by baseline and proximity, preserving both source lines.
     starts = []
     for i, line in enumerate(lines):
+        if i in excluded_indices:continue
         if line.y_top_pt <= page.height_pt*.55:
             continue
         match = START.match(line.text)
@@ -158,7 +160,7 @@ def detect(page) -> Plan:
     ruled_top = min((lines[i].y_top_pt for i,_,_,j in starts if separator_above(page,lines[j])),default=page.height_pt)
     initial_ids = {k for _,_,ids,_ in starts for k in ids}
     for i,line in enumerate(lines):
-        if i in initial_ids or line.y_top_pt<ruled_top or len(line.text.strip())<3:
+        if i in excluded_indices or i in initial_ids or line.y_top_pt<ruled_top or len(line.text.strip())<3:
             continue
         bbox=gutter_marker(page,line)
         if bbox is not None:
@@ -167,7 +169,7 @@ def detect(page) -> Plan:
                 and abs(other.y_top_pt-bbox[1])<line.h_pt*.7]
             starts.append((i,'?',ids+[i],i));unreadable[i]=bbox
     candidate_ids = {k for _,_,ids,_ in starts for k in ids}
-    raw_refs = [(i,a,b,m) for i,l in enumerate(lines) if i not in candidate_ids
+    raw_refs = [(i,a,b,m) for i,l in enumerate(lines) if i not in candidate_ids and i not in excluded_indices
                 for a,b,m in reference_offsets(l.text)]
     notes = []
     ruled_regions = []
@@ -192,7 +194,7 @@ def detect(page) -> Plan:
             if lines[a].y_top_pt>line.y_top_pt+line.h_pt*.5),default=page.height_pt)
         for j in sorted(range(len(lines)),key=lambda j:(lines[j].y_top_pt,lines[j].x_pt)):
             other = lines[j]
-            if j in candidate_ids or other.y_top_pt<=content.y_top_pt or other.y_top_pt>=next_start:
+            if j in excluded_indices or j in candidate_ids or other.y_top_pt<=content.y_top_pt or other.y_top_pt>=next_start:
                 continue
             previous = lines[indices[-1]]
             if (other.y_top_pt-previous.y_top_pt>previous.h_pt*2.3
@@ -212,7 +214,7 @@ def detect(page) -> Plan:
     groups = {i for n in notes for i in n.indices}
     references = []
     for i, line in enumerate(lines):
-        if i in groups:
+        if i in excluded_indices or i in groups:
             continue
         for a, b, marker in reference_offsets(line.text):
             targets = [n for n,note in enumerate(notes) if note.marker==marker]
