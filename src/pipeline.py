@@ -94,6 +94,9 @@ def run_document(pdf: Path, output: Path, *, max_pages: int | None = None,
                 stats={**previous.get("stats",{}),"manifest_id":existing_id,"pages_ingested":existing_pages,"reused":True}
                 state.update(status="model_enrichment",completed_pages=existing_pages,total_pages=existing_pages)
                 atomic_json(state_file,state)
+                from src.artifact_attributes import enrich_artifact_attributes
+                with get_session(engine) as session:
+                    state["artifact_stage"] = enrich_artifact_attributes(session, existing_id, base_url=base_url)
                 from src.model_enrichment import enrich_with_models
                 state["model_stage"]={"status":"skipped"} if skip_models else enrich_with_models(engine,existing_id,run_dir,base_url,settings_path)
                 with get_session(engine) as session:
@@ -148,6 +151,8 @@ def run_document(pdf: Path, output: Path, *, max_pages: int | None = None,
                                 description="请对照原页核对文字层", priority_score=0.8))
                 from src.enrichment import enrich_document
                 stats.update(enrich_document(session, stats["manifest_id"], pages, run_dir, base_url))
+                from src.artifact_attributes import enrich_artifact_attributes
+                state["artifact_stage"] = enrich_artifact_attributes(session, stats["manifest_id"], base_url=base_url)
                 manifest=session.get(Manifest,stats["manifest_id"])
                 manifest.work.metadata_json={**manifest.work.metadata_json,"index_fingerprint":fingerprint}
             state["status"] = "exporting"
@@ -169,6 +174,8 @@ def run_document(pdf: Path, output: Path, *, max_pages: int | None = None,
 
 
 def _export(session, manifest_id: str, run_dir: Path, base_url: str):
+    from src.artifact_attributes import export_attributes
+    export_attributes(session, manifest_id, run_dir)
     from src.alto.exporter import export_canvas
     builder = IiifBuilder(session, base_url)
     atomic_json(run_dir / "manifest.json", builder.build_manifest(manifest_id))

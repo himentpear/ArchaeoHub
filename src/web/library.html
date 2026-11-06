@@ -1931,6 +1931,15 @@
           };
         }
 
+        let attributeLinks = document.createElement('div');
+        attributeLinks.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin:8px 0';
+        for (let record of art.attribute_records || []) {
+          let button = document.createElement('button');
+          button.textContent = '属性与证据 · ' + record.short_title + (record.review_status === 'needs_review' ? ' · 待审' : '');
+          button.onclick = () => openArtifactAttributes(record.id).catch(e => notice(e.message));
+          attributeLinks.append(button);
+        }
+        left.insertBefore(attributeLinks, left.querySelector('.occ-list'));
         let occList = left.querySelector('.occ-list');
         for (let occ of art.occurrences) {
           let row = document.createElement('div');
@@ -3071,6 +3080,109 @@
       $('overlay').append(rect);
     }
 
+    async function openArtifactAttributes(artifactId, reviewer = {}, candidateId = null) {
+      const query = candidateId ? 'candidate=' + encodeURIComponent(candidateId) : 'id=' + encodeURIComponent(artifactId);
+      const detail = await request('/api/artifact?' + query);
+      document.getElementById('artifactAttributeDialog')?.remove();
+      const dialog = document.createElement('dialog');
+      dialog.id = 'artifactAttributeDialog';
+      dialog.style.cssText = 'width:88vw;max-width:1050px;max-height:88vh;overflow:auto;padding:24px';
+      const title = document.createElement('h3');
+      title.textContent = detail.artifact_no + ' 属性与证据';
+      dialog.append(title);
+      const note = document.createElement('p');
+      note.textContent = '自动填充值为待审候选。请逐项查看原文和编号对应；冲突值不会自动覆盖已审结果。';
+      dialog.append(note);
+      const names = {artifact_type:'器类',typology:'型式',material:'材质',period:'明确年代',decoration:'纹饰',measurements:'尺寸'};
+      const statuses = {pending:'待审',approved:'已审',rejected:'已拒绝',stale:'已失效',conflict:'有冲突',approved_with_conflict:'已审值存在新冲突',external_value:'保留已有填写值'};
+      const fieldName = key => key.startsWith('measurements.') ? key.slice(13) : names[key] || key;
+      function displayValue(value) {
+        if (value === null || (Array.isArray(value) && !value.length) || (typeof value === 'object' && !Object.keys(value).length)) return '未填写';
+        if (Array.isArray(value)) return value.join('；');
+        if (typeof value === 'object' && value.unit) return (value.value ?? (value.min + '～' + value.max)) + ' ' + value.unit;
+        if (typeof value === 'object') return Object.entries(value).map(([key,item]) => key + ' ' + displayValue(item)).join('；');
+        return String(value);
+      }
+      const projection = document.createElement('dl');
+      projection.style.cssText = 'display:grid;grid-template-columns:90px minmax(0,1fr);gap:8px 16px;margin:18px 0';
+      for (const [key, value] of Object.entries(detail.attributes)) {
+        const term = document.createElement('dt'), definition = document.createElement('dd');
+        term.textContent = names[key] || key;
+        definition.textContent = displayValue(value);
+        definition.style.margin = '0';
+        projection.append(term, definition);
+      }
+      dialog.append(projection);
+      const fields = document.createElement('p');
+      fields.textContent = Object.entries(detail.workflow.fields || {}).map(([key,state]) => fieldName(key) + '：' + (statuses[state.status] || state.status)).join('；');
+      dialog.append(fields);
+      const actorLabel = document.createElement('label'), actor = document.createElement('input');
+      actorLabel.textContent = '审校人 '; actor.value = reviewer.actor || $('actor').value;
+      actorLabel.append(actor);
+      const reasonLabel = document.createElement('label'), reason = document.createElement('input');
+      reasonLabel.textContent = ' 依据 '; reason.value = reviewer.note || '';
+      reason.style.width = '45%'; reasonLabel.append(reason);
+      dialog.append(actorLabel, reasonLabel);
+      const feedback = document.createElement('p'); dialog.append(feedback);
+      function button(label, action, parent = dialog) {
+        const control = document.createElement('button');
+        control.textContent = label;
+        control.onclick = async () => {
+          control.disabled = true;
+          try { await action(); } catch (error) { feedback.textContent = error.message; }
+          finally { control.disabled = false; }
+        };
+        parent.append(control); return control;
+      }
+      button('关闭', () => { dialog.close(); dialog.remove(); });
+      if (!detail.candidates.length) {
+        const empty = document.createElement('p'); empty.textContent = '暂无属性候选，请先运行器物属性补填。'; dialog.append(empty);
+      }
+      for (const candidate of detail.candidates) {
+        const section = document.createElement('details');
+        section.style.cssText = 'border-top:1px solid #ddd;margin-top:18px;padding-top:12px';
+        const heading = document.createElement('summary');
+        heading.style.cursor = 'pointer';
+        heading.textContent = fieldName(candidate.field) + ' ' + displayValue(candidate.value) + ' · ' + (statuses[candidate.status] || candidate.status)
+          + ' · ' + (candidate.method.startsWith('rules:') ? '规则抽取' : '模型 ' + (candidate.model || ''));
+        section.append(heading);
+        const value = document.createElement('p');
+        value.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere';
+        value.textContent = displayValue(candidate.value); section.append(value);
+        for (const evidence of candidate.evidence) {
+          const quote = document.createElement('p');
+          quote.style.whiteSpace = 'pre-wrap';
+          quote.textContent = '印刷页 ' + (evidence.printed_page || '未识别') + ' / PDF第' + evidence.scan_index + '页：' + evidence.quote;
+          section.append(quote);
+          button('定位这段原文', async () => {
+            dialog.close(); dialog.remove();
+            await jumpToPage(evidence.manifest_id, evidence.canvas_id, evidence.scan_index, evidence.xywh, 'text');
+          }, section);
+        }
+        async function reviewAttribute(status) {
+          await request('/api/review', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({
+              task_id:candidate.task_id, status, actor:actor.value, note:reason.value,
+              expected_revision:candidate.page_revision, expected_artifact_revision:detail.artifact_revision
+            })
+          });
+          const saved = {actor:actor.value,note:reason.value};
+          dialog.close(); dialog.remove();
+          await openArtifactAttributes(detail.id, saved);
+          await triggerActiveSearchOrIndex();
+        }
+        if (candidate.source_current && candidate.status === 'pending') {
+          button('确认此候选', () => reviewAttribute('approved'), section);
+          button('拒绝此候选', () => reviewAttribute('rejected'), section);
+        } else if (candidate.source_current && candidate.status === 'approved') {
+          button('撤回此候选', () => reviewAttribute('rejected'), section);
+        }
+        dialog.append(section);
+      }
+      document.body.append(dialog); dialog.showModal();
+    }
+
     async function openGraphic(id) {
       let detail = await request('/api/graphics?id=' + encodeURIComponent(id));
       let old = document.getElementById('graphicDialog'); if (old) old.remove();
@@ -3397,6 +3509,11 @@
     async function review(status) {
       if (!bundle || !$('task').value) return;
       try {
+        const task = bundle.review_tasks.find(t => t.task_id === $('task').value);
+        if (task?.target_type === 'artifact_attribute') {
+          await openArtifactAttributes(null, {}, task.target_id);
+          return;
+        }
         let data = {
           task_id: $('task').value,
           actor: $('actor').value,

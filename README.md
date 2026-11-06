@@ -212,6 +212,7 @@ python3 -m venv .venv
 | :--- | :--- |
 | 部署、处理命令、模型配置与备份 | [Digitization Runbook](docs/digitization_runbook.md) |
 | IIIF / ALTO / 数据库结构 | [Architecture](docs/iiif_alto_db_architecture.md) |
+| 器物属性抽取、增量补填与逐字段审校 | [器物属性工作流](docs/artifact_attribute_workflow.md) |
 | 最新已记录的实施状态 | [Implementation Status](docs/implementation_status_2026-10-30.md) |
 | 验收要求 | [Acceptance Specification](docs/acceptance_specification.md) |
 | PDF 数字化入口 | [`scripts/process_document.py`](scripts/process_document.py) |

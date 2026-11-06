@@ -1,0 +1,43 @@
+{
+  "status": "passed",
+  "artifact_records": 6960,
+  "artifacts_with_projected_attributes": 6520,
+  "candidate_status": {
+    "pending": 31969,
+    "stale": 16
+  },
+  "candidate_methods": {
+    "rules:artifact-attributes-v1": 31967,
+    "cloud:artifact-attributes-v1": 18
+  },
+  "active_candidates_checked": 31969,
+  "evidence_pieces_checked": 64585,
+  "field_coverage": {
+    "artifact_type": 4470,
+    "typology": 5022,
+    "material": 2733,
+    "period": 0,
+    "decoration": 2016,
+    "measurements": 5064
+  },
+  "field_status": {
+    "pending": 26243,
+    "conflict": 534
+  },
+  "source_text_preservation": {
+    "alto_blocks": {
+      "unchanged": true,
+      "baseline_hash": "bc76dc38bde2b106112911e82a68b7479f153d64b286966101e8f9015b73f14e",
+      "current_hash": "bc76dc38bde2b106112911e82a68b7479f153d64b286966101e8f9015b73f14e"
+    },
+    "alto_lines": {
+      "unchanged": true,
+      "baseline_hash": "920e61a8606486eb059e0a86bad8931908b4bdc616f13b0c3e020ac0f59f164a",
+      "current_hash": "920e61a8606486eb059e0a86bad8931908b4bdc616f13b0c3e020ac0f59f164a"
+    }
+  },
+  "integrity_check": "ok",
+  "foreign_key_errors": [],
+  "errors": [],
+  "limitation": "Checks evidence/association/projection consistency, not human semantic accuracy or P/R/F1."
+}

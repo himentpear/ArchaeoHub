@@ -222,6 +222,57 @@ class ModelRouter:
             return saved
         raise RuntimeError("Local extraction unavailable or failed validation; review required")
 
+    def extract_artifact_attributes(self, source: str, artifact_no: str, *, force_cloud: bool = False) -> dict:
+        from src.artifact_attributes import MODEL_SCHEMA, VERSION, attribute_prompt
+        from jsonschema import validate
+        if len(source) > 2400:
+            raise ValueError("Specimen source is too long; split it before model extraction")
+        prompt = attribute_prompt(source, artifact_no)
+        local_identity = {
+            "path": str(self.local_model), "size": self.local_model.stat().st_size,
+            "mtime_ns": self.local_model.stat().st_mtime_ns,
+        } if self.local_model else None
+        identity = {
+            "version": VERSION, "prompt": prompt, "schema": MODEL_SCHEMA,
+            "local_model": local_identity, "model": self.model,
+            "endpoint": self.base_url, "force_cloud": force_cloud,
+        }
+        key = hashlib.sha256(json.dumps(identity, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        cache = self.cache / ("attributes-" + key + ".json")
+        if cache.exists():
+            saved = json.loads(cache.read_text(encoding="utf-8"))
+            validate(saved["result"], MODEL_SCHEMA)
+            return {**saved, "cached": True}
+        if self.local_model and not force_cloud:
+            try:
+                if self.llm is None:
+                    from llama_cpp import Llama
+                    self.llm = Llama(model_path=str(self.local_model), n_ctx=4096,
+                                     n_threads=self.threads, verbose=False)
+                response = self.llm.create_chat_completion(
+                    messages=[{"role": "user", "content": prompt}],
+                    response_format={"type": "json_object", "schema": MODEL_SCHEMA},
+                    temperature=0, max_tokens=1600,
+                )
+                provider, model = "local", self.local_model.name
+            except Exception:
+                if not self.allow_cloud:
+                    raise RuntimeError("Local attribute extraction failed") from None
+                response = self._cloud([{"role": "user", "content": prompt}], max_tokens=1800)
+                provider, model = "cloud", self.model
+        else:
+            response = self._cloud([{"role": "user", "content": prompt}], max_tokens=1800)
+            provider, model = "cloud", self.model
+        if response["choices"][0].get("finish_reason") == "length":
+            raise ValueError("Attribute extraction output truncated")
+        value = json.loads(response["choices"][0]["message"]["content"])
+        if isinstance(value, dict) and value.get("type") == "json_object":
+            value = {k: v for k, v in value.items() if k != "type"}
+        validate(value, MODEL_SCHEMA)
+        saved = {"provider": provider, "model": model, "result": value}
+        atomic_json(cache, saved)
+        return saved
+
     def inspect_image(self, image: Path, question: str) -> dict:
         data=base64.b64encode(image.read_bytes()).decode()
         content=[{"type":"text","text":question+"。只输出包含两个字段的JSON：transcription为逐字转录字符串或null，"

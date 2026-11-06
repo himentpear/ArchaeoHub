@@ -76,6 +76,19 @@ MAX_LOCAL_BLOCKS_PER_DOCUMENT=30
 
 模型阶段只处理有领域线索的有限数量文本块，配置控制每份文献的上限。其余候选在 `remaining_candidates` 中明确记录；规则结果依然保留。模型实体区分候选与已审结果，保留类型、逐字原文位置及来源锚点。重跑模型阶段使用缓存，避免重复调用。
 
+## 器物属性增量补填
+
+已有编号索引可继续补充器类、型式、材质、明确年代、纹饰和尺寸：
+
+```powershell
+.venv\Scripts\python.exe scripts/enrich_artifacts.py --dry-run
+.venv\Scripts\python.exe scripts/enrich_artifacts.py
+```
+
+命令先备份数据库，随后按标本绑定属性，生成有出处的字段候选。无冲突值以待审状态填入器物字段；冲突和既有人工填写不会被自动覆盖。可选模型阶段通过 `--models --max-model-units 5` 显式开启。
+
+操作与审校方式详见 [器物属性工作流](artifact_attribute_workflow.md)。
+
 ## 阅览与审校
 
 ```powershell

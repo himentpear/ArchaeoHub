@@ -636,6 +636,41 @@ class ArtifactOccurrence(Base):
     canvas: Mapped[Canvas] = relationship()
 
 
+class ArtifactAttributeCandidate(Base):
+    """A field assertion, its exact evidence and its independent review state.
+
+    Artifact columns may expose a pending projection; this table remains the
+    authority for whether each assertion was actually reviewed.
+    """
+
+    __tablename__ = "artifact_attribute_candidates"
+    __table_args__ = (
+        UniqueConstraint("fingerprint", name="uq_artifact_attribute_fingerprint"),
+        Index("idx_artifact_attribute_field", "artifact_id", "field_name", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_uuid)
+    artifact_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("artifacts.id", ondelete="CASCADE"), nullable=False
+    )
+    manifest_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("manifests.id", ondelete="CASCADE"), nullable=False
+    )
+    canvas_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("canvases.id", ondelete="CASCADE"), nullable=False
+    )
+    field_name: Mapped[str] = mapped_column(String(96), nullable=False)
+    value_json: Mapped[Any] = mapped_column(JSON, nullable=False)
+    evidence: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    method: Mapped[str] = mapped_column(String(64), nullable=False)
+    model: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="pending")
+    reviewer: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    review_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
 class ImageAsset(Base):
     """High-resolution standalone photograph/drawing asset with perceptual & visual fingerprints."""
 

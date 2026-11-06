@@ -6,7 +6,7 @@ from src.alto.parser import AltoIngestor
 
 def resolve_review(session, task_id: str, *, actor: str, note: str, status: str,
                    expected_revision: int, line_id: str | None = None, text: str | None = None,
-                   footnote_id: str | None = None):
+                   footnote_id: str | None = None, expected_artifact_revision: int | None = None):
     if status not in {"approved","rejected"} or not actor.strip() or not note.strip():
         raise ValueError("Reviewer, reason and valid resolution are required")
     task=session.get(ReviewTask,task_id)
@@ -21,6 +21,14 @@ def resolve_review(session, task_id: str, *, actor: str, note: str, status: str,
         raise ValueError("Page revision conflict; reload before reviewing")
     before={"task_status":task.status,"revision":canvas.revision_no}
     after={"task_status":status,"note":note}
+    if task.target_type == "artifact_attribute":
+        if text is not None:
+            raise ValueError("Review attributes separately from source text corrections")
+        from src.artifact_attributes import review_candidate
+        after["artifact_attribute"] = review_candidate(
+            session, task.target_id, status=status, actor=actor, note=note,
+            expected_artifact_revision=expected_artifact_revision,
+        )
     if text is not None:
         if status!="approved" or line_id is None or not text.strip() or len(text)>20000:
             raise ValueError("An approved correction requires a nonempty line")
@@ -100,6 +108,8 @@ def resolve_review(session, task_id: str, *, actor: str, note: str, status: str,
 
 
 def _reindex_block(session,block,canvas):
+    from src.artifact_attributes import invalidate_candidates
+    invalidate_candidates(session, block.id)
     from sqlalchemy import delete
     from src.db.models import (ArchEntity,EntityMention,ProvenanceAnchor,RagChunk,Manifest,
         Artifact,ArtifactOccurrence,IndexEntry,PlateFigure,IiifRange,FigureMention)

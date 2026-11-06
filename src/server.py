@@ -763,8 +763,23 @@ def _build_index_cache(engine) -> dict:
                         )
 
         # 7. Build Cross-Volume Artifact & Excavation Unit Index
+        attribute_records = {
+            a.id: {
+                "id": a.id, "work_id": a.work_id,
+                "artifact_type": a.artifact_type, "typology": a.typology,
+                "material": a.material, "period": a.period,
+                "decoration": a.decoration, "measurements": a.measurements,
+                "review_status": a.review_status,
+                "field_status": {
+                    name: state["status"] for name, state in
+                    a.metadata_json.get("attribute_workflow", {}).get("fields", {}).items()
+                },
+            }
+            for a in session.scalars(select(Artifact))
+        }
         occ_rows = session.execute(
             select(
+                Artifact.id,
                 Artifact.artifact_no,
                 Artifact.excavation_unit,
                 ArtifactOccurrence.canvas_id,
@@ -777,7 +792,7 @@ def _build_index_cache(engine) -> dict:
         unit_counter = Counter()
         unit_cross_counter = Counter()
 
-        for art_no, exc_unit, cid, snippet, t_xywh in occ_rows:
+        for artifact_id, art_no, exc_unit, cid, snippet, t_xywh in occ_rows:
             c_info = canvases_by_id.get(cid)
             if not c_info:
                 continue
@@ -803,10 +818,15 @@ def _build_index_cache(engine) -> dict:
                     "unit": base_unit,
                     "raw_unit": unit,
                     "vessel_name": "",
+                    "attribute_records": [],
                     "occurrences": [],
                     "_seen_keys": set(),
                 }
                 artifacts_by_code[scope_key] = entry
+            if not any(record["id"] == artifact_id for record in entry["attribute_records"]):
+                entry["attribute_records"].append({
+                    **attribute_records[artifact_id], "short_title": m_info["short_title"],
+                })
 
             v_name = _extract_vessel_name(snippet or "")
             if v_name and (
@@ -888,8 +908,9 @@ def _build_index_cache(engine) -> dict:
             entry["volume_count"] = len(vols)
             entry["has_thumb"] = any(o.get("thumb_url") for o in entry["occurrences"])
             snippets_joined = " ".join(o["snippet"] for o in entry["occurrences"])
+            attributes_joined = json.dumps(entry["attribute_records"], ensure_ascii=False)
             entry["_norm"] = _norm_text(
-                f"{entry['code']} {entry['unit']} {entry['vessel_name']} {' '.join(vols)} {snippets_joined}"
+                f"{entry['code']} {entry['unit']} {entry['vessel_name']} {' '.join(vols)} {snippets_joined} {attributes_joined}"
             )
             cross_artifacts.append(entry)
 
@@ -1004,6 +1025,17 @@ def make_server(library: Path, host: str = "127.0.0.1", port: int = 8000, source
                 )
             if path == "/health":
                 return self.send({"status": "ok", "database": engine.dialect.name})
+            if path == "/api/artifact":
+                from src.artifact_attributes import artifact_detail
+                with get_session(engine) as session:
+                    artifact_id = query.get("id", [""])[0]
+                    if query.get("candidate"):
+                        from src.db.models import ArtifactAttributeCandidate
+                        candidate = session.get(ArtifactAttributeCandidate, query["candidate"][0])
+                        if candidate is None:
+                            raise LookupError()
+                        artifact_id = candidate.artifact_id
+                    return self.send(artifact_detail(session, artifact_id))
 
             if path in {"/api/graphics","/api/graphic_asset","/api/graphic_export"}:
                 from src.graphics.service import object_detail,asset_path,render_html,render_xlsx
@@ -1425,6 +1457,8 @@ def make_server(library: Path, host: str = "127.0.0.1", port: int = 8000, source
                                 "risk": r.risk_type,
                                 "status": r.status,
                                 "description": r.description,
+                                "target_type": r.target_type,
+                                "target_id": r.target_id,
                             }
                             for r in session.scalars(
                                 select(ReviewTask).where(ReviewTask.manifest_id == mid)
