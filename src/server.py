@@ -844,7 +844,9 @@ def _build_index_cache(engine) -> dict:
                     entry["vessel_name"] = v_name
                 matched_existing = False
                 for occ in entry["occurrences"]:
-                    if occ["canvas_id"] == f_occ["canvas_id"]:
+                    if (occ["canvas_id"] == f_occ["canvas_id"]
+                            and (f_occ["role"] != "plate" or
+                                 occ["snippet"].strip() == f_occ["snippet"].strip())):
                         occ["thumb_url"] = f_occ["thumb_url"]
                         occ["figure_number"] = f_occ["figure_number"]
                         if f_occ["role"] == "plate":

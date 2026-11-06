@@ -461,7 +461,7 @@ class DigitalPdfIngestor:
                             code = sp["text"]
                             artifact = artifacts_by_code.get(code)
                             if artifact is None:
-                                unit_part = code.split("∶")[0].split(":")[0]
+                                unit_part = re.split(r"[:：∶︰]", code, maxsplit=1)[0]
                                 artifact = Artifact(
                                     work_id=work.id,
                                     artifact_no=code,
@@ -585,6 +585,14 @@ class DigitalPdfIngestor:
     def _detect_page_number_and_domain_hint(
         pdf_idx: int, lines: list[ExtractedLine], h_pt: float
     ) -> tuple[Optional[str], str]:
+        # Extracted volumes may start on a plate. Require a standalone plate
+        # header near the top and numbered captions, not a prose reference.
+        if any(re.match(r"^\d+[.．、]\s*\S", ln.text.strip()) for ln in lines):
+            for ln in lines:
+                label = ln.text.strip()
+                if (ln.y_top_pt < h_pt * 0.15
+                        and re.fullmatch(r"(?:图版|彩版)\s*\d+(?:\.\d+)*", label)):
+                    return label, "plate"
         if pdf_idx == 0:
             return None, "cover"
         if not lines:
