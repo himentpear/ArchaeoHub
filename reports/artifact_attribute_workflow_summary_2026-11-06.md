@@ -43,7 +43,7 @@
 
 ## 实际模型试跑
 
-使用外部配置中的 `deepseek-flash` 接口，对 T30H2∶301、T3扩④a∶13、T13H2∶602 三条真实标本描述进行了试跑，产生18条通过字段证据校验的候选。原始输出与缓存保存在第一卷运行目录的 `artifact_model_cache`，试跑汇总见 [模型试跑记录](artifact_attribute_model_pilot.json)。
+使用外部配置中的 `deepseek-flash` 接口，对 T30H2∶301、T3扩④a∶13、T13H2∶602 三条真实标本描述进行了试跑，产生18条通过字段证据校验的候选。原始输出与缓存保存在第一卷运行目录的 `artifact_model_cache`，试跑汇总保存在本地 `reports/artifact_attribute_model_pilot.json`。
 
 试跑暴露并修正了整句型式定义、瓷类词尾规范及整数与浮点数格式造成的伪冲突。原始模型响应保留，未改写原始语料。三条样例不能替代独立抽样、双人标注和 Precision Recall F1 评测；全部真实库候选仍为待审，没有冒充人工确认。
 
@@ -51,7 +51,7 @@
 
 - 首次补填前快照：`data/processed/library/backups/before-attributes-1793948470651253400.db`。
 - 后续规则与格式统一前另有完整快照，位置写入 `artifact_attribute_summary.json`。
-- 机器核查结果：[artifact_attribute_workflow_verification.json](artifact_attribute_workflow_verification.json)。
+- 机器核查结果保存在本地 `reports/artifact_attribute_workflow_verification.json`。
 - 操作规范与命令：[器物属性工作流](../docs/artifact_attribute_workflow.md)。
 - 增量入口：`scripts/enrich_artifacts.py`；来源核查入口：`scripts/verify_artifact_attributes.py`。
 

@@ -8,6 +8,7 @@ venv/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+.pytest_cache/
 
 # Editor and operating system files
 .vscode/
@@ -28,6 +29,16 @@ data/raw/*
 *.db-wal
 *.log
 *.tmp
+/tmp/
+/outputs/
+node_modules/
+
+# Generated experiment reports and visual QA artifacts
+/reports/**/*.json
+!/reports/graphics_models_manifest.json
+/reports/*_visual_qa/
+/ArchaeoHub_README_Package.zip
+
 data/processed/library/
 data/processed/models/
 data/processed/benchmarks/

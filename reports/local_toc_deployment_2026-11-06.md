@@ -18,7 +18,7 @@
 | 校验与调用 | 格式、来源及树结构校验未报错，错误记录为0；云端调用为0 |
 | 当前状态 | completed_with_review，待人工核验 |
 
-原始汇总与逐条建议见 [local_toc_review_pilot.json](local_toc_review_pilot.json)。其中 `elapsed_seconds` 为末批耗时，不是整轮总时长，本记录不据此报告总耗时。
+原始汇总与逐条建议保存在本地 `reports/local_toc_review_pilot.json`。其中 `elapsed_seconds` 为末批耗时，不是整轮总时长，本记录不据此报告总耗时。
 
 ## 审查发现
 
