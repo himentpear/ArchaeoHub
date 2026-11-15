@@ -2,20 +2,23 @@
 from __future__ import annotations
 import hashlib
 import json
+import os
 from pathlib import Path
 import sqlite3
 import subprocess
+import sys
 import time
 from sqlalchemy import select,delete,update
 from src.db.models import Canvas,Manifest,AltoLine,ReviewTask
 from src.db.session import init_db,get_session
 from src.graphics.models import GraphicRun,GraphicObject,GraphicFragment,GraphicCell
 from src.graphics.geometry import transform_points,box_polygon
-from src.graphics.grouping import continuation_evidence,stitch_pair
+from src.graphics.grouping import continuation_evidence,stitch_pair,table_label_key
 from src.ingest.page_pipeline import atomic_json,file_hash,job_lock
 
 ROOT=Path(__file__).resolve().parents[2]
 DEFAULT_RUNTIME=ROOT/'data/processed/models/graphics-runtime/Scripts/python.exe'
+DEFAULT_LAYOUT_MODEL='PP-DocLayoutV3'
 
 
 def source_guard(db_path,manifest_id):
@@ -40,7 +43,8 @@ def clone_database(source,target):
 
 def implementation_hash():
     h=hashlib.sha256()
-    for path in sorted((ROOT/'src/graphics').glob('*.py')):h.update(path.read_bytes().replace(b'\r\n',b'\n'))
+    paths=[*(ROOT/'src/graphics').glob('*.py'),ROOT/'src/ocr_api.py']
+    for path in sorted(paths):h.update(path.read_bytes().replace(b'\r\n',b'\n'))
     return h.hexdigest()
 
 
@@ -68,21 +72,44 @@ def prepare_request(engine,manifest_id,pages,config):
         return {'config':config,'pages':items}
 
 
-def import_pages(engine,manifest_id,cache,pages,config,guard):
+def import_pages(engine,manifest_id,cache,pages,config,guard,*,incremental=False,published=False,asset_root=None):
     fingerprint=hashlib.sha256(json.dumps(config,sort_keys=True).encode()).hexdigest()
     with get_session(engine) as session:
         manifest=session.get(Manifest,manifest_id)
         existing=session.scalar(select(GraphicRun).where(GraphicRun.manifest_id==manifest_id,GraphicRun.fingerprint==fingerprint))
         if existing:
-            if existing.status=='complete':return existing.id
-            raise ValueError('Incomplete run exists; use another output directory to preserve it')
-        run=GraphicRun(manifest_id=manifest_id,fingerprint=fingerprint,config={**config,'source_guard':guard,'pages':pages,'created_at':time.time()})
-        session.add(run);session.flush();descriptors=[]
-        for n in pages:
+            if existing.status!='complete':raise ValueError('Incomplete run exists; use another output directory to preserve it')
+            if existing.config.get('source_guard')!=guard:raise ValueError('Graphic source revision changed')
+            if not incremental:return existing.id
+        run=existing or GraphicRun(manifest_id=manifest_id,fingerprint=fingerprint,
+            config={**config,'source_guard':guard,'pages':[],'created_at':time.time()},published=published)
+        session.add(run);session.flush()
+        previous_pages=set(run.config.get('pages',[]))
+        pending=sorted(set(pages)-previous_pages)
+        if not pending:return run.id
+        descriptors=[];new_fragments=set()
+        classification_pending=run.metrics.get('classification_pending',0)
+        illustration_grids=run.metrics.get('illustration_grids',0)
+        namespace=manifest.work.metadata_json.get('source_namespace') or manifest.work_id
+        for part,obj,canvas in session.execute(select(GraphicFragment,GraphicObject,Canvas).join(
+                GraphicObject,GraphicFragment.object_id==GraphicObject.id).join(Canvas,GraphicFragment.canvas_id==Canvas.id).where(
+                GraphicObject.run_id==run.id).order_by(Canvas.scan_index,GraphicFragment.source_key)):
+            descriptors.append({'object_id':obj.id,'fragment_id':part.id,'manifest_id':manifest_id,'namespace':namespace,
+                'page':canvas.scan_index,'label':obj.label,'category':obj.category,'signature':part.evidence.get('signature',{}),
+                'appendix':part.evidence.get('appendix',False),'section_id':'appendix_tables' if part.evidence.get('appendix') else None,
+                'continuation':part.evidence.get('continuation',False)})
+        for n in pending:
             data=json.loads((cache/f'{n:05d}.json').read_text(encoding='utf8'))
             if config.get('implementation_hash') and data.get('signature',{}).get('config')!=config:
                 raise ValueError('Worker cache configuration/model version mismatch; rerun the worker')
             canvas=session.scalar(select(Canvas).where(Canvas.manifest_id==manifest_id,Canvas.scan_index==n))
+            for excluded in data.get('excluded_table_grids',[]):
+                if excluded.get('reason')=='native_ocr_classification_pending':
+                    classification_pending+=1
+                    session.add(ReviewTask(manifest_id=manifest_id,canvas_id=canvas.id,target_type='canvas',target_id=canvas.id,
+                        risk_type='table_classification_pending',priority_score=.8,
+                        description=f'物理页 {n} 的数据表与图件分类存在模型分歧，原始裁片和版面判断已保留。'))
+                else:illustration_grids+=1
             if data['signature']['source_hash']!=file_hash(Path(canvas.image_storage_path)):raise ValueError('Page image changed')
             sx=canvas.width/data['image_size'][0];sy=canvas.height/data['image_size'][1]
             scale=[[sx,0,0],[0,sy,0],[0,0,1]]
@@ -93,17 +120,24 @@ def import_pages(engine,manifest_id,cache,pages,config,guard):
                 polygon=transform_points(box_polygon(r['bbox']),scale)
                 fragment=GraphicFragment(object_id=obj.id,canvas_id=canvas.id,source_key=r['key'],bbox=[r['bbox'][0]*sx,r['bbox'][1]*sy,
                     (r['bbox'][2]-r['bbox'][0])*sx,(r['bbox'][3]-r['bbox'][1])*sy],polygon=polygon,rotation=r['rotation'],
-                    transform={'crop_to_source':r['crop_to_source'],'source_to_canvas':scale},source_hash=r['source_hash'],crop_path=r['crop_path'],confidence=r['score'],
+                    transform={'crop_to_source':r['crop_to_source'],'source_to_canvas':scale},source_hash=r['source_hash'],
+                    crop_path=publish_asset(r['crop_path'],Path(asset_root)/run.id) if asset_root else r['crop_path'],confidence=r['score'],
                     evidence={'header_rows':r.get('structure',{}).get('header_rows',0),'signature':r.get('structure',{}).get('signature',{}),
                         'continuation':r.get('continuation',False),'appendix':r.get('appendix',False),'method':r['method'],
-                        'completeness':r.get('completeness',{})})
-                session.add(fragment);session.flush()
+                        'completeness':r.get('completeness',{}),'crop_size':r.get('crop_size')})
+                session.add(fragment);session.flush();new_fragments.add(fragment.id)
                 for c in r.get('cells',[]):
                     poly=transform_points(c['polygon_source'],scale)
                     session.add(GraphicCell(fragment_id=fragment.id,row_index=c['row'],column_index=c['column'],row_span=c['row_span'],column_span=c['column_span'],
                         raw_text=c.get('text',''),value_kind=c.get('value_kind','unreadable'),symbols=c.get('symbols',[]),header_path=c.get('header_path',[]),
-                        anchors=[{'canvas_id':canvas.id,'scan_index':n,'polygon':poly,'source_hash':r['source_hash']}],crop_path=c.get('crop_path',''),
-                        confidence=c.get('confidence',0),evidence={'method':c.get('method'),'line_results':c.get('line_results',[])}))
+                        anchors=[{'canvas_id':canvas.id,'scan_index':n,'polygon':poly,'source_hash':r['source_hash']}],
+                        crop_path=publish_asset(c['crop_path'],Path(asset_root)/run.id) if asset_root and c.get('crop_path') else c.get('crop_path',''),
+                        confidence=c.get('confidence',0),evidence={'method':c.get('method'),'line_results':c.get('line_results',[]),
+                            'ocr_engine':c.get('ocr_engine'),'confidence_available':c.get('confidence_available',True),
+                            'geometry_level':c.get('geometry_level','cell'),'requires_review':c.get('requires_review',True),
+                            'bbox':c.get('bbox'),'header':c.get('header',False),'header_section':c.get('header_section'),'scope':c.get('scope'),
+                            'ocr_candidates':c.get('ocr_candidates',[]),'ocr_result':c.get('ocr_result'),'source_band':c.get('source_band'),
+                            'source_matrix':c.get('source_matrix',False)}))
                 descriptors.append({'object_id':obj.id,'fragment_id':fragment.id,'manifest_id':manifest_id,'namespace':manifest.work.metadata_json.get('source_namespace') or manifest.work_id,
                     'page':n,'label':obj.label,'category':obj.category,'signature':fragment.evidence['signature'],'appendix':r.get('appendix',False),
                     'section_id':'appendix_tables' if r.get('appendix') else None,'continuation':r.get('continuation',False)})
@@ -113,17 +147,20 @@ def import_pages(engine,manifest_id,cache,pages,config,guard):
         # Only explicit, structurally supported continuations are grouped. Raw
         # fragment rows remain unchanged, so header folding and undo are lossless.
         for i,b in enumerate(descriptors):
+            if b['fragment_id'] not in new_fragments:continue
             conflicts=[]
             for a in reversed(descriptors[:i]):
                 evidence=continuation_evidence(a,b)
                 if not evidence['accepted']:
-                    if a['label'] and a['label']==b['label']:conflicts.append({'candidate_fragment':a['fragment_id'],**evidence})
+                    if a['label'] and table_label_key(a['label'])==table_label_key(b['label']):conflicts.append({'candidate_fragment':a['fragment_id'],**evidence})
                     continue
                 source=session.get(GraphicObject,b['object_id']);target=session.get(GraphicObject,a['object_id'])
                 while target.status=='superseded':target=session.get(GraphicObject,target.evidence['merged_into'])
+                if target.status=='rejected':continue
                 part=session.get(GraphicFragment,b['fragment_id']);part.object_id=target.id;part.part_index=b['page']
                 part.evidence={**part.evidence,'fold_repeated_header':True}
                 target.structure={**target.structure,'continuations':target.structure.get('continuations',[])+[{'fragment_id':part.id,**evidence}]}
+                if incremental:target.revision_no+=1
                 source.status='superseded';source.evidence={**source.evidence,'merged_into':target.id}
                 b['object_id']=target.id
                 break
@@ -136,11 +173,12 @@ def import_pages(engine,manifest_id,cache,pages,config,guard):
         # Repeated table headers cannot trigger this path.
         import cv2,numpy as np
         for i,b in enumerate(descriptors):
+            if b['fragment_id'] not in new_fragments:continue
             for a in reversed(descriptors[:i]):
                 if b['page']-a['page']!=1 or a['category']!=b['category']:continue
                 if a['label'] and b['label'] and a['label']!=b['label']:continue
                 target=session.get(GraphicObject,a['object_id']);source=session.get(GraphicObject,b['object_id'])
-                if target.id==source.id or target.status=='superseded' or source.status=='superseded':continue
+                if target.id==source.id or target.status in {'superseded','rejected'} or source.status in {'superseded','rejected'}:continue
                 first=session.get(GraphicFragment,a['fragment_id']);second=session.get(GraphicFragment,b['fragment_id'])
                 first_path=target.structure.get('composite_path',first.crop_path)
                 im1=cv2.imdecode(np.fromfile(first_path,np.uint8),cv2.IMREAD_COLOR)
@@ -148,19 +186,24 @@ def import_pages(engine,manifest_id,cache,pages,config,guard):
                 image,evidence=stitch_pair(im1,im2,b['category'])
                 if not evidence['accepted']:continue
                 composite=cache/f'composite-{target.id}.png';cv2.imencode('.png',image)[1].tofile(composite)
+                if asset_root:composite=Path(publish_asset(composite,Path(asset_root)/run.id))
                 previous=target.structure.get('fragment_to_composite',{first.id:np.eye(3).tolist()})
                 transforms={fid:(np.asarray(evidence['first_to_composite'])@np.asarray(matrix)).tolist() for fid,matrix in previous.items()}
                 transforms[second.id]=evidence['second_to_composite']
                 target.structure={**target.structure,'composite_path':str(composite.resolve()),'stitch':evidence,
                     'stitch_steps':target.structure.get('stitch_steps',[])+[evidence],'fragment_to_composite':transforms,
                     'table_structure_pending':b['category']=='table'}
+                if incremental:target.revision_no+=1
                 second.object_id=target.id;second.part_index=b['page'];source.status='superseded'
                 source.evidence={**source.evidence,'merged_into':target.id};b['object_id']=target.id;break
-        run.status='complete';run.metrics={'pages':len(pages),'regions':len(descriptors)};session.flush();return run.id
+        completed=sorted(previous_pages|set(pending))
+        run.config={**run.config,'pages':completed}
+        run.status='complete';run.metrics={'pages':len(completed),'regions':len(descriptors),
+            'classification_pending':classification_pending,'illustration_grids':illustration_grids};session.flush();return run.id
 
 
-def run_graphics(library,manifest_id,output,pages,*,runtime=DEFAULT_RUNTIME,layout_model='PP-DocLayout_plus-L',complex_review=True,skip_worker=False,
-                 with_vl=True,allow_api_review=False,settings_path=None,max_vl_regions=12):
+def run_graphics(library,manifest_id,output,pages,*,runtime=DEFAULT_RUNTIME,layout_model=DEFAULT_LAYOUT_MODEL,complex_review=True,skip_worker=False,
+                 with_vl=True,allow_api_review=False,settings_path=None,max_vl_regions=12,tables_only=False,layout_cache=None,deploy_to=None):
     library,output=Path(library).resolve(),Path(output).resolve();output.mkdir(parents=True,exist_ok=True)
     if library==output:raise ValueError('A separate staging library is required until benchmark gates pass')
     with job_lock(output/'graphics.lock'):
@@ -170,19 +213,53 @@ def run_graphics(library,manifest_id,output,pages,*,runtime=DEFAULT_RUNTIME,layo
             raise ValueError('Staging source snapshot is stale; choose a new output directory before processing')
         engine=init_db('sqlite:///'+(output/'library.db').as_posix())
         try:
-            config={'layout_model':layout_model,'threads':4,'complex_review':complex_review,'implementation_hash':implementation_hash(),
+            from src.ocr_api import PaddleOcrClient
+            from src.settings import load_settings
+            config={'manifest_id':manifest_id,'layout_model':layout_model,'threads':4,'complex_review':complex_review,'implementation_hash':implementation_hash(),
+                'source_revision':guard,
+                'ocr':PaddleOcrClient(load_settings(settings_path)).identity,
                 'weights_lock_sha256':model_fingerprint(),
                 'selected_pages':sorted(set(pages)),'with_vl':with_vl,'allow_api_review':allow_api_review,'max_vl_regions':max_vl_regions}
+            if tables_only:config['tables_only']=True
+            if layout_cache:config['layout_cache']=str(Path(layout_cache).resolve())
             request=prepare_request(engine,manifest_id,pages,config)
             atomic_json(output/'request.json',request)
             # Historical revisions must never point at overwritten crop files.
             cache_key=hashlib.sha256(json.dumps(config,sort_keys=True).encode()).hexdigest()[:20]
             cache=output/'graphics-cache'/cache_key;cache.mkdir(parents=True,exist_ok=True)
+            deployment_progress=None
+            if deploy_to is not None:
+                deploy_to=Path(deploy_to).resolve()
+                deployment_progress={'workflow':'graphics','status':'recognizing','started_at':time.time(),
+                    'current_manifest':manifest_id,'documents':[{'manifest_id':manifest_id,'scanned_pages':len(pages),
+                        'table_pages':sorted(set(pages)),'table_regions':0}],'retry_count':0,
+                    'runtime':str(Path(runtime).resolve()),'settings_path':str(Path(settings_path).resolve()) if settings_path else None}
+                atomic_json(output/'progress.json',deployment_progress)
+                job_id=hashlib.sha256(str(output).encode()).hexdigest()[:20]
+                try:
+                    with job_lock(deploy_to/'table-jobs'/f'{job_id}-worker.lock'):pass
+                except OSError:pass
+                else:
+                    with (output/'deployment.log').open('ab') as deployment_log:
+                        subprocess.Popen([sys.executable,'-u',str(ROOT/'scripts/deploy_table_batch.py'),
+                            '--staging',str(output),'--library',str(deploy_to),'--watch'],cwd=ROOT,
+                            stdout=deployment_log,stderr=subprocess.STDOUT,
+                            creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
             if not skip_worker:
+                command=[str(runtime),str(ROOT/'src/graphics/worker.py'),'--request',str(output/'request.json'),'--output',str(cache)]
+                if settings_path:command.extend(['--settings',str(settings_path)])
                 with (output/'worker.log').open('w',encoding='utf8') as log:
-                    result=subprocess.run([str(runtime),str(ROOT/'src/graphics/worker.py'),'--request',str(output/'request.json'),'--output',str(cache)],
-                        cwd=ROOT,stdout=log,stderr=subprocess.STDOUT)
-                if result.returncode:raise RuntimeError('Graphic worker failed; inspect staging worker.log (no production rows changed)')
+                    for attempt in range(3 if deploy_to is not None else 1):
+                        if deployment_progress is not None:
+                            deployment_progress['retry_count']=attempt
+                            atomic_json(output/'progress.json',deployment_progress)
+                        result=subprocess.run(command,cwd=ROOT,stdout=log,stderr=subprocess.STDOUT)
+                        if result.returncode==0:break
+                if result.returncode:
+                    if deployment_progress is not None:
+                        deployment_progress['status']='failed'
+                        atomic_json(output/'progress.json',deployment_progress)
+                    raise RuntimeError('Graphic worker failed; inspect staging worker.log')
             if source_guard(source,manifest_id)!=guard:raise ValueError('Source was edited during processing; keep staging and reconcile before import')
             refinements=[];router=None
             if allow_api_review:
@@ -212,7 +289,16 @@ def run_graphics(library,manifest_id,output,pages,*,runtime=DEFAULT_RUNTIME,layo
                 atomic_json(cache/f'{n:05d}.json',data)
             atomic_json(output/'refinements.json',refinements)
             run_id=import_pages(engine,manifest_id,cache,pages,config,guard)
-            result={'run_id':run_id,'manifest_id':manifest_id,'library':str(output),'cache':str(cache),'status':'staged','published':False,'pages':pages}
+            with get_session(engine) as session:metrics=dict(session.get(GraphicRun,run_id).metrics)
+            result={'run_id':run_id,'manifest_id':manifest_id,'library':str(output),'cache':str(cache),'status':'staged',
+                    'published':False,'pages':pages,'metrics':metrics}
+            if deployment_progress is not None:
+                deployment_progress['status']='complete'
+                deployment_progress['documents'][0]['table_regions']=sum(
+                    region['category']=='table' for n in pages
+                    for region in json.loads((cache/f'{n:05d}.json').read_text(encoding='utf8'))['regions'])
+                atomic_json(output/'progress.json',deployment_progress)
+                result['deployment']={'job_id':job_id,'status':'queued','library':str(deploy_to)}
             atomic_json(output/'graphics-job.json',result);return result
         finally:engine.dispose()
 

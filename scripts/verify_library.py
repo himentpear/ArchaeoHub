@@ -36,10 +36,12 @@ def verify(library: Path, manifest_id: str | None = None) -> dict:
                     out_of_bounds+=1
         if len(canvases)!=manifest["total_pages"]:errors.append({"error":"page_count_mismatch"})
         if [p["scan_index"] for p in canvases]!=list(range(1,len(canvases)+1)):errors.append({"error":"nonconsecutive_physical_pages"})
-        original_hash=file_hash(Path(manifest["source_pdf_path"]))
-        if original_hash!=manifest["source_pdf_sha256"]:errors.append({"error":"source_hash_changed"})
-        data={"manifest_id":manifest["id"],"source":Path(manifest["source_pdf_path"]).name,"pages":len(canvases),
-              "source_preserved":original_hash==manifest["source_pdf_sha256"],"page_methods":dict(methods),
+        source_path=Path(manifest["source_pdf_path"] or "")
+        original_hash=file_hash(source_path) if source_path.is_file() else None
+        if original_hash is None:errors.append({"error":"missing_source_pdf"})
+        elif original_hash!=manifest["source_pdf_sha256"]:errors.append({"error":"source_hash_changed"})
+        data={"manifest_id":manifest["id"],"source":source_path.name,"pages":len(canvases),
+              "source_preserved":original_hash is not None and original_hash==manifest["source_pdf_sha256"],"page_methods":dict(methods),
               "out_of_canvas_lines":out_of_bounds,"errors":errors}
         for table in ["alto_blocks","alto_lines","plates_figures","iiif_ranges","rag_chunks","provenance_anchors","review_tasks"]:
             if table in {"alto_blocks","alto_lines"}:

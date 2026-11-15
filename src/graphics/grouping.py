@@ -10,14 +10,74 @@ LABEL=re.compile(r"(续\s*)?((?:附\s*)?表|图版|彩版|图)\s*([一二三四�
 
 def caption_for(region, lines, page_height):
     x0,y0,x1,y1=region
-    nearby=[l for l in lines if y0-page_height*.13 <= l["bbox"][1] <= y0+8
+    nearby=[l for l in lines if (y0-page_height*.13 <= l["bbox"][1] <= y0+8 or y1-8<=l['bbox'][1]<=y1+page_height*.1)
         and l["bbox"][0]<x1 and l["bbox"][2]>x0]
     marked=[(l,LABEL.search(l["text"])) for l in nearby if LABEL.search(l["text"])]
     if not marked:return {"label":"","title":"","continuation":False,"appendix":False}
-    line,m=max(marked,key=lambda pair:pair[0]["bbox"][1])
-    title_lines=[l["text"] for l in nearby if abs(l["bbox"][1]-line["bbox"][1])<max(15,page_height*.012)]
-    return {"label":re.sub(r"\s+","",m[2]+m[3]),"title":" ".join(title_lines),
-        "continuation":bool(m[1]),"appendix":"附" in m[2]}
+    preferred=[pair for pair in marked if '表' in pair[1][2] and pair[0]['bbox'][1]<=y0+8
+               or pair[1][2].startswith('图') and pair[0]['bbox'][1]>=y1-8]
+    line,m=min(preferred or marked,key=lambda pair:min(abs(y0-pair[0]['bbox'][3]),abs(pair[0]['bbox'][1]-y1)))
+    title_lines=[l for l in nearby if abs(l["bbox"][1]-line["bbox"][1])<max(15,page_height*.012)]
+    return {"label":re.sub(r"\s+","",m[2]+m[3]),"title":" ".join(l['text'] for l in title_lines),
+        "continuation":bool(m[1]),"appendix":"附" in m[2],
+        'caption_bbox':[min(l['bbox'][0] for l in title_lines),min(l['bbox'][1] for l in title_lines),
+                        max(l['bbox'][2] for l in title_lines),max(l['bbox'][3] for l in title_lines)]}
+
+
+def table_label_key(label):
+    match=LABEL.fullmatch(re.sub(r'\s+','',label))
+    if not match:return label
+    digits={character:index for index,character in enumerate('零一二三四五六七八九')}
+    digits['〇']=0
+    def number(value):
+        if value.isascii() and value.isdigit():return str(int(value))
+        if all(character in digits for character in value):return str(int(''.join(str(digits[character]) for character in value)))
+        total=0;current=0
+        for character in value:
+            if character in digits:current=digits[character]
+            else:total+=(current or 1)*{'十':10,'百':100}[character];current=0
+        return str(total+current)
+    return match[2]+'.'.join(number(part) for part in re.split(r'[.．]',match[3]))
+
+
+def box_coverage(box,container):
+    x0,y0,x1,y1=box
+    return max(0,min(x1,container[2])-max(x0,container[0]))*max(0,min(y1,container[3])-max(y0,container[1]))/max(1,(x1-x0)*(y1-y0))
+
+
+def boxes_coverage(box,containers):
+    rectangles=[]
+    for container in containers:
+        clipped=[max(box[0],container[0]),max(box[1],container[1]),min(box[2],container[2]),min(box[3],container[3])]
+        if clipped[2]>clipped[0] and clipped[3]>clipped[1]:rectangles.append(clipped)
+    edges=sorted({value for rectangle in rectangles for value in (rectangle[0],rectangle[2])})
+    area=0.
+    for left,right in zip(edges,edges[1:]):
+        intervals=sorted((rectangle[1],rectangle[3]) for rectangle in rectangles if rectangle[0]<=left and rectangle[2]>=right)
+        height=0.;end=None
+        for bottom,top in intervals:
+            height+=max(0,top-max(bottom,end if end is not None else bottom))
+            end=max(top,end if end is not None else top)
+        area+=(right-left)*height
+    return area/max(1,(box[2]-box[0])*(box[3]-box[1]))
+
+
+def data_table_regions(regions, layout, lines, page_height):
+    """Disambiguate measured grids inside illustrations using layout and captions."""
+    kept=[];excluded=[]
+    figures=[box['coordinate'] for box in layout.get('boxes',[]) if box['label'].lower() in {'image','figure','chart'}]
+    for region in regions:
+        if region['category']!='table':continue
+        caption=caption_for(region['bbox'],lines,page_height)
+        label=caption['label']
+        if region['method']!='grid_supplement' or '表' in label:
+            kept.append(region);continue
+        coverage=boxes_coverage(region['bbox'],figures)
+        if label.startswith('图') or coverage>=.8:
+            excluded.append({**region,'reason':'grid_in_illustration','figure_coverage':round(coverage,4),'caption':caption})
+        else:
+            kept.append(region)
+    return kept,excluded
 
 
 def table_signature(cells,width,image=None,header_count=2):
@@ -42,7 +102,7 @@ def continuation_evidence(a,b):
         return {"accepted":False,"reason":"different_source"}
     if a.get("category")!="table" or b.get("category")!="table":
         return {"accepted":False,"reason":"not_a_table_continuation"}
-    if not a.get("label") or a["label"]!=b.get("label"):
+    if not a.get("label") or table_label_key(a["label"])!=table_label_key(b.get("label",'')):
         return {"accepted":False,"reason":"different_label"}
     adjacent=0<b["page"]-a["page"]<=1
     appendix=a.get("appendix") and b.get("appendix") and a.get("section_id")==b.get("section_id")

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from src.graphics.pipeline import run_graphics,promote,unpublish,DEFAULT_RUNTIME
+from src.graphics.pipeline import run_graphics,promote,unpublish,DEFAULT_RUNTIME,DEFAULT_LAYOUT_MODEL
 
 
 def page_list(value):
@@ -23,11 +23,14 @@ if __name__=='__main__':
     parser.add_argument('--output',type=Path,default=Path('data/processed/benchmarks/graphics-stage'))
     parser.add_argument('--pages',type=page_list)
     parser.add_argument('--runtime',type=Path,default=DEFAULT_RUNTIME)
-    parser.add_argument('--layout-model',default='PP-DocLayout_plus-L',choices=['PP-DocLayout_plus-L','PP-DocLayout-S'])
+    parser.add_argument('--layout-model',default=DEFAULT_LAYOUT_MODEL,choices=['PP-DocLayoutV3','PP-DocLayout_plus-L','PP-DocLayout-S'])
     parser.add_argument('--skip-worker',action='store_true',help='Import existing source-hash-checked worker cache')
     parser.add_argument('--no-complex-review',action='store_true')
+    parser.add_argument('--tables-only',action='store_true',help='Recognize data tables discovered on the selected pages')
+    parser.add_argument('--layout-cache',type=Path,help='Reuse source-checked layout discovery pages')
     parser.add_argument('--skip-vl',action='store_true',help='Skip optional local VLM second opinions during model benchmarking')
     parser.add_argument('--allow-api-review',action='store_true');parser.add_argument('--settings',type=Path)
+    parser.add_argument('--deploy',action='store_true',help='Incrementally deploy completed pages into the source library')
     parser.add_argument('--publish',metavar='RUN_ID');parser.add_argument('--evaluation',type=Path)
     parser.add_argument('--unpublish',metavar='RUN_ID',help='Back up and deactivate a published graphic overlay without deleting source rows')
     args=parser.parse_args()
@@ -40,5 +43,6 @@ if __name__=='__main__':
         if not args.manifest_id or not args.pages:parser.error('--manifest-id and --pages required')
         result=run_graphics(args.library,args.manifest_id,args.output,args.pages,runtime=args.runtime,layout_model=args.layout_model,
             complex_review=not args.no_complex_review,skip_worker=args.skip_worker,with_vl=not args.skip_vl,
-            allow_api_review=args.allow_api_review,settings_path=args.settings)
+            allow_api_review=args.allow_api_review,settings_path=args.settings,tables_only=args.tables_only,layout_cache=args.layout_cache,
+            deploy_to=args.library if args.deploy else None)
     print(json.dumps(result,ensure_ascii=False,indent=2))

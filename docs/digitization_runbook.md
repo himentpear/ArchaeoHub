@@ -10,7 +10,40 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements-models.txt --only-binary=llama-cpp-python
 ```
 
-基础流程使用 PyMuPDF、RapidOCR / PP-OCRv6 小模型和 ONNX Runtime CPU，不要求 CUDA。语言模型是可选阶段；模型结果必须通过原文字面证据校验，不能覆盖原始识别结果。PyMuPDF 软件分发需确认相应许可要求。
+基础流程使用 PyMuPDF 提取可用的原生文字，扫描页和图表文字通过独立 API 调用 PaddleOCR-VL v1.6。本机使用 CPU。语言模型补充抽取属于可选阶段，其结果需要原文证据校验。PyMuPDF 软件分发需确认相应许可要求。
+
+## PaddleOCR-VL v1.6
+
+OCR运行于独立的 Python 3.11 环境，底层使用 `PaddleOCRVL(pipeline_version="v1.6")`，同时保存原生 JSON 与 Markdown 导出。
+
+```powershell
+py -3.11 -m venv data/processed/models/graphics-runtime
+data/processed/models/graphics-runtime/Scripts/python.exe -m pip install -r requirements-graphics.txt
+data/processed/models/graphics-runtime/Scripts/python.exe scripts/serve_ocr.py --port 18082 --device cpu
+```
+
+服务提供 `POST /v1/chat/completions`，支持单张 base64 `image_url`，返回包含识别块、原图坐标、Markdown及模型来源的 JSON。当前模型名为 `PaddleOCR-VL-1.6-0.9B`，模型信息与运行状态可从本机查看。[模型列表](http://127.0.0.1:18082/v1/models)
+
+默认 API 地址为 `http://127.0.0.1:18082/v1`，调用超时1800秒，生成上限8192 token，单个识别区域像素上限1003520。本机采用单批次串行推理。可通过以下配置项调整。
+
+```dotenv
+OCR_BASE_URL=http://127.0.0.1:18082/v1
+OCR_MODEL=PaddleOCR-VL-1.6-0.9B
+OCR_TIMEOUT=1800
+OCR_MAX_TOKENS=8192
+OCR_MAX_PIXELS=1003520
+OCR_API_KEY=
+```
+
+扫描页识别结果写入对应运行目录的 `ocr-vl/<页图名>/`。图表流程先定位并校正区域，再用 v1.6 识别整表和图中文字，结果写入区域目录的 `paddleocr-vl/`。`result.json` 保留模型信息与原生结果，`document.md` 及配套图片可直接查看。独立服务的原生导出与重试缓存位于 `data/processed/models/ocr-vl-cache/`。
+
+v1.6提供块级坐标。整表结构与已有网格一致时使用单元格定位，存在结构歧义时使用整表范围并记录待核查状态。识别器的置信度缺省会明确标记。修改模型或生成参数会生成新的缓存标识，历史识别可通过原有运行记录回溯。
+
+已有文献需要重新处理才能生成 v1.6 结果。表格可用 `process_graphics.py` 在暂存库运行，新文献通过 `process_document.py` 进入完整流程。`process_document_cuda.py` 调用GPU模式的同一OCR服务，设备由服务端配置。
+
+2026年11月15日实机核验通过125项测试。《观台磁州窑址》物理页535的最新一轮结果包含2张表、103个单元格，首轮CPU处理926.52秒，缓存重试33.12秒。表头文字的跨格归属与数值仍需人工核查，样例以待审候选保存。暂存阅览已指向该模型样例库。[打开暂存阅览](http://127.0.0.1:18002)
+
+样例的 JSON、Markdown 和运行统计位于 `data/processed/benchmarks/paddleocr-vl-20261115/`。完整模型输出可直接查看。[第一张表的Markdown](../data/processed/benchmarks/paddleocr-vl-20261115/graphics-cache/bc17cc30c1327f0555b7/00535-00/paddleocr-vl/document.md)
 
 ## 外部配置
 
@@ -25,6 +58,10 @@ MAX_CLOUD_CALLS_PER_DOCUMENT=20
 MAX_CLOUD_TOKENS_PER_DOCUMENT=50000
 LOCAL_MODEL_PATH=D:/path/to/model.gguf
 LOCAL_MODEL_THREADS=4
+LOCAL_LLM_BASE_URL=http://127.0.0.1:18081/v1
+LOCAL_LLM_MODEL=Qwen3-4B-Q4_K_M.gguf
+LOCAL_LLM_RESPONSE_FORMAT=json_schema
+LOCAL_LLM_TIMEOUT=150
 MAX_LOCAL_BLOCKS_PER_DOCUMENT=30
 ```
 
@@ -65,6 +102,17 @@ MAX_LOCAL_BLOCKS_PER_DOCUMENT=30
 
 ## 本地语言模型
 
+本地语言模型通过独立 HTTP 服务运行，实体、属性和目录阶段使用 OpenAI 兼容的 `POST /v1/chat/completions`。在一个终端启动推理服务，再在另一个终端启动阅览室或处理任务。
+
+```powershell
+.venv\Scripts\python.exe scripts/serve_model.py --model data/processed/models/Qwen3-4B-Q4_K_M.gguf --port 18081
+.venv\Scripts\python.exe scripts/serve_library.py --library data/processed/library --port 18000
+```
+
+本机部署地址为 [阅览室](http://127.0.0.1:18000) 和 [模型列表](http://127.0.0.1:18081/v1/models)。`serve_model.py` 默认使用4线程、8192上下文及本机回环地址，可通过参数设置模型、端口、线程和上下文。
+
+`LOCAL_LLM_RESPONSE_FORMAT` 可设为 `json_schema`、`llama_json` 或 `json_object`。默认的 `json_schema` 使用 OpenAI 格式，由推理服务入口转换为底层 Schema 约束。应用端继续校验结构与逐字证据。兼容服务可配置 `LLM_BASE_URL`、`LLM_MODEL`、`LLM_API_KEY` 和 `LLM_RESPONSE_FORMAT`，已有 DeepSeek 配置也可读取。模型服务只接受已部署的模型名，换用其他权重后应同步更新模型别名和配置。
+
 ```powershell
 .venv\Scripts\python.exe scripts/download_local_model.py
 # 需要更高质量时对比 4B 的 4-bit 量化版本
@@ -100,6 +148,36 @@ MAX_LOCAL_BLOCKS_PER_DOCUMENT=30
 审校保存要求审校人、依据和当前页面版本；过期版本返回冲突，避免覆盖其他人的修改。原始 `raw_ocr` 保留，校对文本另存；编号/尺寸等受保护内容的修改要求详细说明。文字、全文检索、注释、索引与导出随审校更新，并记录 Revision。
 
 服务默认仅监听本机。当前提供原尺寸图像及像素区域裁切，IIIF Image API 宣告 level0，不宣称完整 level2 能力。默认地址为 `http://127.0.0.1:8000/iiif`；使用其他端口时，生成阶段也需通过 `--base-url` 设置一致地址。
+
+## 编号核查与比对标注
+
+检索结果以线图作为主图，正文、图注、表格、脚注和标题带来源标签。历史段落中的编号型图注还会结合括号内器号识别。标签仍依赖既有版面与图注证据，可通过原页核验。
+
+“编号问题”分页展示同号记录中的器类、出土单位、层位或属性候选冲突，可按当前检索词和卷次筛选。在器物的“属性、编号与证据”或问题清单中打开“校订编号”，填写校订号、同号消歧标记、审校人和依据。相同消歧标记用于跨卷关联。
+
+校订保存于器物元数据，界面和 `artifacts.json` 同时提供原书编号与校订编号。搜索支持两种编号，保存同步刷新跨卷缓存并导出器物数据。修订带版本检查与历史记录，可撤销最近一次修改。当前编辑粒度为一个器物档案，同档案内的多件器物仍需后续拆分工具。
+
+自由比对画布每张卡片提供“箭头”“撤销箭头”和“删除箭头”。启用箭头后拖动画线，拖动端点调整位置。坐标绑定图像，随缩放、镜像和卡片尺寸变化同步。比对卡片及箭头保存在当前浏览器的本地存储中。
+
+在检索主图的大图窗口中点击“单器物精确切分”，在原页上拖框，选择器号和视图后保存。已有裁片可调整坐标或撤回，保存采用版本与原图哈希检查。确认的精确切片优先展示于检索主图，器物导出记录包含 `image_regions`。
+
+结构化表格详情中的“与正文核对”按明确器号绑定行，使用有出处的正文尺寸与表格同名尺寸比较。单位换算复用属性工作流，编号歧义和缺少单位时保留待核查状态。接口为 `GET /api/table_alignment?id=<图表ID>`。
+
+## Agent试验
+
+PAI Agent SDK 在独立环境中运行，使用本机模型 API 与检索工具完成器号核查。
+
+```powershell
+.venv\Scripts\python.exe -m venv data/processed/models/agent-runtime
+data/processed/models/agent-runtime/Scripts/python.exe -m pip install -r requirements-agent.txt
+data/processed/models/agent-runtime/Scripts/python.exe scripts/check_artifact_agent.py --query "T20D2∶314"
+```
+
+器物卡片提供“Agent核查（试验）”。任务先调用检索工具，再通过 Schema 约束选择差异类型和来源对，界面使用已检索原文生成核查条目。任务限3次模型请求、2次工具调用和240秒总时限，结果及来源存入文献库的 `agent_runs/`。关闭窗口后可通过同一器物档案重新连接正在运行的任务。
+
+Agent任务绑定当前器物档案及报告体系，同号消歧后的记录各自检索。运行期间原文或编号版本变化会提示重跑。条目为待审候选，实机试跑仍出现来源配对与差异类型误报，需核验原文。
+
+自动视觉 Grounding、轮廓分割及 OCR 换模准确率仍需后续模型与独立标注评测。本轮部署与实机验收见 [2026-11-15 部署记录](../reports/phased_deployment_2026-11-15.md)。
 
 ## 备份恢复
 

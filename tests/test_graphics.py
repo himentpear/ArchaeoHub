@@ -1,5 +1,6 @@
 """Source-preserving graphic processing, adverse merge cases and publication gates."""
 import io,json
+import hashlib
 from pathlib import Path
 import cv2
 import numpy as np
@@ -153,11 +154,123 @@ def test_staging_grouping_exports_and_source_guard(staged):
     with pytest.raises(ValueError):promote(stage,production,run,path)
 
 
+def test_header_review_and_cell_edits_refresh_logical_records_and_undo(staged):
+    engine,_,_,_,run,_=staged
+    with get_session(engine) as session:
+        obj=session.scalar(select(GraphicObject).where(GraphicObject.run_id==run,GraphicObject.status!='superseded'))
+        before=object_detail(session,obj.id)
+        cell=before['cells'][0]
+        result=review_graphic(session,obj.id,expected_revision=1,actor='tester',note='核对原书第一列的表头名称',
+                              action='correct_cell',cell_id=cell['id'],text='新表头')
+        updated=object_detail(session,obj.id)
+        assert updated['table']['columns'][0]['header_path']==['新表头']
+        assert updated['cells'][3]['header_path']==['新表头']
+        header_result=review_graphic(session,obj.id,expected_revision=2,actor='tester',note='原书该片段从数据开始没有表头',
+                                     action='set_header_rows',target_id=before['fragments'][0]['id'],header_rows=0)
+        assert object_detail(session,obj.id)['table']['header_rows']==0
+        undo_review(session,obj.id,header_result['revision_id'],expected_revision=3,actor='tester',note='恢复原书片段的表头设置')
+        restored=object_detail(session,obj.id)
+        assert restored['table']['header_rows']==1
+        assert restored['table']['columns'][0]['header_path']==['新表头']
+
+
+def test_incremental_publication_preserves_edits_and_is_idempotent(staged):
+    _,production,stage,mid,_,guard=staged
+    engine=init_db('sqlite:///'+(production/'library.db').as_posix())
+    try:
+        options={'incremental':True,'published':True,'asset_root':production/'graphics'}
+        run_id=import_pages(engine,mid,stage/'graphics-cache',[1],{'layout_model':'test'},guard,**options)
+        with get_session(engine) as session:
+            obj=session.scalar(select(GraphicObject).where(GraphicObject.run_id==run_id))
+            original_id=obj.id
+            detail=object_detail(session,obj.id)
+            cell_id=detail['cells'][-1]['id']
+            review_graphic(session,obj.id,expected_revision=1,actor='tester',note='核对原书并保留单元格校订',
+                action='correct_cell',cell_id=cell_id,text='corrected')
+        assert import_pages(engine,mid,stage/'graphics-cache',[1,2],{'layout_model':'test'},guard,**options)==run_id
+        with get_session(engine) as session:
+            detail=object_detail(session,original_id)
+            assert len(detail['fragments'])==2 and len(detail['cells'])==12
+            assert next(cell for cell in detail['cells'] if cell['id']==cell_id)['text']=='corrected'
+            revision=detail['revision']
+            run=session.get(GraphicRun,run_id)
+            assert run.published and run.config['pages']==[1,2] and run.metrics['regions']==2
+            assert all(Path(part.crop_path).is_relative_to(production/'graphics') for part in session.scalars(
+                select(GraphicFragment).join(GraphicObject).where(GraphicObject.run_id==run_id)))
+        import_pages(engine,mid,stage/'graphics-cache',[1,2],{'layout_model':'test'},guard,**options)
+        with get_session(engine) as session:
+            assert object_detail(session,original_id)['revision']==revision
+    finally:engine.dispose()
+
+
+def test_running_table_batch_deploys_with_progress_and_rollback(staged):
+    from src.graphics.pipeline import prepare_request
+    from src.table_jobs import list_table_jobs, rollback_table_batch, sync_table_batch
+    from src.ingest.page_pipeline import atomic_json
+    stage_engine,production,stage,mid,_,_=staged
+    config={'layout_model':'test','manifest_id':mid}
+    request=prepare_request(stage_engine,mid,[1,2],config)
+    key=hashlib.sha256(json.dumps(config,sort_keys=True).encode()).hexdigest()[:20]
+    cache=stage/'graphics-cache'/key
+    cache.mkdir()
+    for page in (1,2):
+        data=json.loads((stage/'graphics-cache'/f'{page:05d}.json').read_text(encoding='utf8'))
+        data['signature']['config']=config
+        atomic_json(cache/f'{page:05d}.json',data)
+    atomic_json(stage/'request.json',request)
+    atomic_json(stage/'progress.json',{'status':'complete','documents':[{'manifest_id':mid,'scanned_pages':2,
+        'table_pages':[1,2],'table_regions':2}]})
+    result=sync_table_batch(stage,production)
+    assert result['status']=='complete' and result['deployed_pages']==2
+    assert result['tables']==1 and result['records']==2
+    assert list_table_jobs(production)[0]['id']==result['id']
+    assert sync_table_batch(stage,production)['runs']==result['runs']
+    rollback_table_batch(stage,production)
+    assert sync_table_batch(stage,production)['status']=='paused'
+    engine=init_db('sqlite:///'+(production/'library.db').as_posix())
+    try:
+        with get_session(engine) as session:
+            assert not session.get(GraphicRun,result['runs'][mid]).published
+    finally:engine.dispose()
+
+
+def test_graphics_entrypoint_registers_deployment_and_retries_worker(staged,tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    from src.graphics.pipeline import run_graphics
+    _,production,stage,mid,_,guard=staged
+    calls=[];children=[]
+    def worker(command,**options):
+        calls.append(command)
+        if len(calls)==1:return SimpleNamespace(returncode=1)
+        request=json.loads(Path(command[command.index('--request')+1]).read_text(encoding='utf8'))
+        destination=Path(command[command.index('--output')+1])
+        for page in request['pages']:
+            data=json.loads((stage/'graphics-cache'/f"{page['page']:05d}.json").read_text(encoding='utf8'))
+            data['signature']['config']=request['config']
+            (destination/f"{page['page']:05d}.json").write_text(json.dumps(data),encoding='utf8')
+        return SimpleNamespace(returncode=0)
+    def deploy(command,**options):
+        children.append(command)
+        return SimpleNamespace(pid=123)
+    monkeypatch.setattr('src.graphics.pipeline.subprocess.run',worker)
+    monkeypatch.setattr('src.graphics.pipeline.subprocess.Popen',deploy)
+    output=tmp_path/'new-graphics'
+    result=run_graphics(production,mid,output,[1,2],with_vl=False,deploy_to=production)
+    progress=json.loads((output/'progress.json').read_text(encoding='utf8'))
+    request=json.loads((output/'request.json').read_text(encoding='utf8'))
+    assert len(calls)==2 and len(children)==1
+    assert progress['status']=='complete' and progress['retry_count']==1
+    assert request['config']['source_revision']==guard
+    assert result['deployment']['status']=='queued' and '--watch' in children[0]
+
+
 def test_cache_config_rejected_and_published_asset_is_independent(staged,tmp_path):
     from src.graphics.pipeline import publish_asset,unpublish
     engine,production,stage,mid,run,guard=staged
     with pytest.raises(ValueError,match='cache configuration'):
         import_pages(engine,mid,stage/'graphics-cache',[1,2],{'layout_model':'test','implementation_hash':'new-version'},guard)
+    with pytest.raises(ValueError,match='source revision'):
+        import_pages(engine,mid,stage/'graphics-cache',[1,2],{'layout_model':'test'},'stale')
     source=tmp_path/'crop.png';source.write_bytes(b'original source crop')
     copied=Path(publish_asset(source,tmp_path/'published'));source.write_bytes(b'new local candidate')
     assert copied.read_bytes()==b'original source crop'
@@ -222,13 +335,9 @@ def test_api_structure_review_cannot_invent_values():
 
 
 def test_circle_shape_cannot_overwrite_numeric_zero(tmp_path):
-    from types import SimpleNamespace
     from src.graphics.worker import cell_content
-    class Engine:
-        def _load_rec_model(self):return lambda args:SimpleNamespace(txts=['0'],scores=[.99])
-        def __call__(self,*args,**kwargs):return SimpleNamespace(boxes=None)
     class Models:
-        def ocr(self):return Engine()
+        def recognize(self,image,**kwargs):return {'blocks':[{'label':'table','text':'<table><tr><td>0</td></tr></table>'}]}
     image=np.full((60,60,3),255,np.uint8);cv2.circle(image,(30,30),16,(0,0,0),2)
     result=cell_content(Models(),image,[{'bbox':[0,0,60,60],'row':0,'column':0}],tmp_path)
     assert result[0]['text']=='0' and result[0]['value_kind']=='text'
@@ -237,18 +346,34 @@ def test_circle_shape_cannot_overwrite_numeric_zero(tmp_path):
 
 def test_graphic_http_details_exports_review_and_sources(staged):
     import threading,httpx
+    from src.db.models import PlateFigure
+    from PIL import Image
     from src.server import make_server
     engine,production,stage,mid,run,guard=staged
     with get_session(engine) as s:
         obj=s.scalar(select(GraphicObject).where(GraphicObject.run_id==run,GraphicObject.status!='superseded'))
         oid=obj.id
+        canvas=s.scalar(select(Canvas).where(Canvas.manifest_id==mid,Canvas.scan_index==1))
+        figure=PlateFigure(manifest_id=mid,canvas_id=canvas.id,figure_number='图1',
+                           crop_x=20,crop_y=20,crop_w=150,crop_h=100)
+        s.add(figure);s.flush();figure_id=figure.id
+        sample_cell=s.scalar(select(GraphicCell).join(GraphicFragment).where(GraphicFragment.object_id==oid))
+        sample_cell.evidence={**sample_cell.evidence,'ocr_engine':'PaddleOCR-VL-1.6-0.9B',
+                              'confidence_available':False,'geometry_level':'table'}
+        sample_cell_id=sample_cell.id
     server=make_server(stage,port=0,source_library=production);thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
     try:
         with httpx.Client(base_url=f'http://127.0.0.1:{server.server_port}') as client:
             detail=client.get('/api/graphics',params={'id':oid}).json()
             assert len(detail['fragments'])==2 and not detail['published']
+            sample=next(cell for cell in detail['cells'] if cell['id']==sample_cell_id)
+            assert not sample['confidence_available'] and sample['geometry_level']=='table'
             assert client.get(detail['fragments'][0]['image_url']).headers['content-type']=='image/png'
             assert client.get(detail['fragments'][0]['source_image_url']).status_code==200
+            for crop,expected_size in [('',(150,100)),('20,20,60,40',(60,40))]:
+                response=client.get('/api/figure_image',params={'id':figure_id,'xywh':crop})
+                assert response.status_code==200
+                assert Image.open(io.BytesIO(response.content)).size==expected_size
             for fmt in ['json','html','xlsx']:
                 response=client.get('/api/graphic_export',params={'id':oid,'format':fmt})
                 assert response.status_code==200 and len(response.content)>100

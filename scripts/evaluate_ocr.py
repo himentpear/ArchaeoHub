@@ -1,6 +1,6 @@
 """Compare local OCR with embedded native text on stratified real document pages."""
 import argparse
-import importlib.metadata
+import hashlib
 import json
 import sys
 import time
@@ -49,9 +49,10 @@ def main():
     parser.add_argument("--pages-per-document",type=int,default=6)
     args=parser.parse_args()
     ocr=LocalOcr(4);rows=[]
+    ocr_key=hashlib.sha256(json.dumps(ocr.client.identity,sort_keys=True).encode()).hexdigest()[:12]
     for pdf in sorted(args.pdf_dir.glob("*.pdf")):
         sha=file_hash(pdf)
-        folder=args.output/sha[:16]
+        folder=args.output/(sha[:16]+'-'+ocr_key)
         extractor=PageExtractor(folder,dpi=180)
         with pymupdf.open(pdf) as document:
             indices=sorted({min(len(document)-1,round(len(document)*(i+1)/(args.pages_per_document+1)))
@@ -74,6 +75,7 @@ def main():
                 protected=AltoIngestor.extract_protected_spans(reference)
                 recalled=sum(normalize(span["text"]) in b for span in protected)
                 row={"source":pdf.name,"scan_index":index+1,"reference_characters":len(a),
+                    "ocr":ocr.client.identity,
                     "edit_distance":edits,"character_error_rate":round(edits/max(1,len(a)),4),
                     "protected_spans":len(protected),"protected_spans_found":recalled,
                     "ocr_seconds":round(time.time()-started,3),"reference":reference,"ocr":text,
@@ -87,7 +89,7 @@ def main():
              "protected_spans":spans,"protected_span_recall":round(sum(r["protected_spans_found"] for r in rows)/max(1,spans),4),
              "protected_verbatim_recall":round(sum(r["protected_verbatim_found"] for r in rows)/max(1,spans),4),
              "protected_normalization":"Whitespace and colon variants only; circled numbers are preserved",
-             "rapidocr_version":importlib.metadata.version("rapidocr"),"dpi":180,
+             "ocr":ocr.client.identity,"dpi":180,
              "limitation":"Native text is a reference, not manually verified truth. Reading-order differences count as character edits; this does not measure accuracy on historical scans."}
     atomic_json(Path("reports/local_ocr_evaluation.json"),{"summary":summary,"pages":rows})
     print(json.dumps(summary,ensure_ascii=False))

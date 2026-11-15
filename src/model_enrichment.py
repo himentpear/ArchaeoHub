@@ -12,7 +12,7 @@ from src.ingest.page_pipeline import atomic_json
 def enrich_with_models(engine, manifest_id: str, run_dir: Path, base_url: str, settings_path: Path | None = None):
     settings=load_settings(settings_path)
     router=ModelRouter.from_settings(run_dir/"model_cache",settings)
-    if router.local_model is None and not (router.allow_cloud and router.key):
+    if not router.local_available and not (router.allow_cloud and router.key):
         result={"status":"unavailable","reason":"No installed local language model or enabled cloud credential"}
         atomic_json(run_dir/"model_stage.json",result)
         return result

@@ -4,13 +4,16 @@
 
 ## 自动处理与预算
 
-`scripts/process_document.py` 已接入此阶段；复用已入库文献时也会检查缓存。`--skip-models` 跳过全部模型阶段，`LOCAL_TOC_ENABLED=false` 单独关闭目录模型。没有本地权重时记录 `unavailable` 并继续保留规则目录。**此阶段始终不调用云端，即使其他阶段允许云端回退。**
+`scripts/process_document.py` 已接入此阶段，复用已入库文献时也会检查缓存。`--skip-models` 跳过全部模型阶段，`LOCAL_TOC_ENABLED=false` 单独关闭目录模型。目录阶段通过独立本地 HTTP 服务调用模型，缺少服务配置和权重信息时记录 `unavailable`。已有目录基线用于显示和核验。
 
 外部配置仍放在 `~/.config/archaeology-digitization/.env`，进程环境变量优先。建议明确指定目录模型：
 
 ```dotenv
 LOCAL_TOC_ENABLED=true
 LOCAL_TOC_MODEL_PATH=D:/Documents/Github/PKU-LM-Humanities-Data-Lab/data/processed/models/Qwen3-4B-Q4_K_M.gguf
+LOCAL_LLM_BASE_URL=http://127.0.0.1:18081/v1
+LOCAL_LLM_MODEL=Qwen3-4B-Q4_K_M.gguf
+LOCAL_LLM_RESPONSE_FORMAT=json_schema
 MAX_LOCAL_TOC_NODES=48
 LOCAL_TOC_BATCH_SIZE=6
 MAX_LOCAL_TOC_BATCHES=8
@@ -19,6 +22,8 @@ LOCAL_MODEL_THREADS=4
 ```
 
 未指定 `LOCAL_TOC_MODEL_PATH` 时，先查找 `LOCAL_MODEL_PATH` 同目录的 `Qwen3-4B-Q4_K_M.gguf`，再尝试 `LOCAL_MODEL_PATH` 本身。手动命令的 `--model` 优先于配置。候选上限与批次上限共同限制处理量；默认最多 48 个候选，不能视为整本文献审查。单批超时单位为秒。
+
+先运行 `scripts/serve_model.py --port 18081`。目录模型可通过 `LOCAL_TOC_BASE_URL`、`LOCAL_TOC_MODEL`、`LOCAL_TOC_API_KEY`、`LOCAL_TOC_RESPONSE_FORMAT` 单独配置，默认复用 `LOCAL_LLM_*`。服务模型别名应与请求一致，HTTP 超时记录为当前批次失败。
 
 ## 对现有文献执行一轮
 
@@ -62,7 +67,6 @@ LOCAL_MODEL_THREADS=4
 | `toc_model_preview.json` | 模型待审目录预览与建议 |
 | `toc_model_manifest.json` | 模型预览的 IIIF Manifest |
 | `manifest.json` | 默认展示策略下的 IIIF Manifest |
-| `toc_local_worker.log` | 本地工作进程诊断日志 |
 
 新增数据库表为 `toc_structure_runs`、`toc_node_proposals`，与原规则目录分离。程序只保存结构化结论和简短依据。
 

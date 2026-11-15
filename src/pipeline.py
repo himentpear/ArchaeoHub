@@ -54,7 +54,11 @@ def run_document(pdf: Path, output: Path, *, max_pages: int | None = None,
     if not 72 <= dpi <= 400:
         raise ValueError("dpi must be between 72 and 400")
     sha256 = file_hash(pdf)
-    config = {"version": PIPELINE_VERSION, "dpi": dpi, "max_pages": max_pages}
+    from src.ocr_api import PaddleOcrClient
+    from src.settings import load_settings
+    ocr_settings = load_settings(settings_path)
+    config = {"version": PIPELINE_VERSION, "dpi": dpi, "max_pages": max_pages,
+              "ocr": PaddleOcrClient(ocr_settings).identity}
     config_hash = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()[:12]
     run_id = f"{sha256[:16]}-{config_hash}"
     run_dir = output / run_id
@@ -77,6 +81,16 @@ def run_document(pdf: Path, output: Path, *, max_pages: int | None = None,
                         raise ValueError("Index code/config changed. Back up and use --rebuild-index to regenerate from cached pages.")
                     existing_id,existing_pages,existing_work=existing.id,existing.total_pages,existing.work_id
                     if stale:
+                        from src.db.models import Artifact, Revision
+                        from src.region_models import ArtifactImageRegion
+                        edited_identity = session.scalar(select(Revision.id).join(
+                            Artifact, Artifact.id == Revision.entity_id
+                        ).where(Artifact.work_id == existing.work_id, Revision.entity_type == "artifact_identity"))
+                        edited_region = session.scalar(select(ArtifactImageRegion.id).join(
+                            Canvas, Canvas.id == ArtifactImageRegion.canvas_id
+                        ).where(Canvas.manifest_id == existing.id))
+                        if edited_identity or edited_region:
+                            raise ValueError("Document contains edited artifact identities or image regions; rebuild in a separate library")
                         human_review=session.scalar(select(ReviewTask.id).where(ReviewTask.manifest_id==existing.id,
                             ReviewTask.status.in_(["approved","rejected","in_review"])))
                         if human_review:
@@ -110,7 +124,7 @@ def run_document(pdf: Path, output: Path, *, max_pages: int | None = None,
             if existing_work:
                 state["pre_reindex_backup"]=str(_backup_database(output))
             pages = []
-            extractor = PageExtractor(run_dir, dpi, threads, graphics_front_dir=graphics_front_dir)
+            extractor = PageExtractor(run_dir, dpi, threads, graphics_front_dir=graphics_front_dir, settings=ocr_settings)
             with pymupdf.open(pdf) as document:
                 total = min(len(document), max_pages) if max_pages else len(document)
                 state["total_pages"] = total

@@ -1,4 +1,4 @@
-"""Resumable PDF page extraction; native text first, local CPU OCR when needed."""
+"""Resumable PDF extraction using native text and an independent PaddleOCR-VL API."""
 from __future__ import annotations
 
 import hashlib
@@ -13,7 +13,7 @@ from src.ingest.digital_pdf_ingestor import DigitalPdfIngestor, ExtractedLine, E
 from src.ingest.layout import order_lines
 from src.io_utils import atomic_write
 
-PIPELINE_VERSION = "3.0.0"
+PIPELINE_VERSION = "4.0.0"
 
 
 def atomic_json(path: Path, value: object) -> None:
@@ -64,21 +64,28 @@ def job_lock(path: Path):
 
 
 class LocalOcr:
-    def __init__(self, threads: int = 4):
-        from rapidocr import RapidOCR
-        self.engine = RapidOCR(params={"EngineConfig.onnxruntime.intra_op_num_threads": threads,
-                                       "EngineConfig.onnxruntime.inter_op_num_threads": 1})
+    def __init__(self, threads: int = 4, settings=None):
+        from src.ocr_api import PaddleOcrClient
+        self.client = PaddleOcrClient(settings)
 
     def recognize(self, image_path: Path, scale: float) -> list[ExtractedLine]:
-        result = self.engine(str(image_path))
-        if result.boxes is None:
-            return []
+        from src.graphics.vision import parse_structure
+        result = self.client.recognize(image_path, output_dir=Path(image_path).parent.parent / "ocr-vl" / Path(image_path).stem)
         lines = []
-        for box, text, confidence in zip(result.boxes, result.txts, result.scores):
-            x0, y0 = box.min(axis=0) / scale
-            x1, y1 = box.max(axis=0) / scale
-            lines.append(ExtractedLine(text, float(x0), float(y0), float(x1-x0),
-                                       float(y1-y0), float((y1-y0)*0.75), float(confidence)))
+        self.regions = []
+        for block in result["blocks"]:
+            text = block["text"]
+            if block["label"] == "table":
+                rows = {}
+                for cell in parse_structure(text):
+                    rows.setdefault(cell["row"], []).append(cell["text"])
+                text = "\n".join("\t".join(cells) for cells in rows.values())
+            x0, y0, x1, y1 = [value / scale for value in block["bbox"]]
+            if block["label"] in {"table", "image", "chart"}:
+                self.regions.append({"category": block["label"], "key": "vl-" + str(len(self.regions)),
+                                     "bbox_pt": [x0, y0, x1, y1]})
+            if text.strip():
+                lines.append(ExtractedLine(text, x0, y0, x1-x0, y1-y0, min(14., (y1-y0)*.75), None))
         return order_lines(lines)
 
 
@@ -106,12 +113,16 @@ def native_quality(page, lines: list[ExtractedLine]) -> tuple[str, list[str]]:
 
 
 class PageExtractor:
-    def __init__(self, run_dir: Path, dpi: int = 180, threads: int = 4, graphics_front_dir: Path | None = None):
+    def __init__(self, run_dir: Path, dpi: int = 180, threads: int = 4, graphics_front_dir: Path | None = None,
+                 settings=None):
         self.run_dir = run_dir
         self.dpi = dpi
         self.threads = threads
         self.ocr = None
         self.graphics_front_dir=graphics_front_dir
+        from src.ocr_api import PaddleOcrClient
+        self.ocr_settings = settings
+        self.ocr_identity = PaddleOcrClient(settings).identity
 
     def attach_regions(self,page):
         if self.graphics_front_dir is None:return page
@@ -120,14 +131,17 @@ class PageExtractor:
         if data['signature']['source_hash']!=file_hash(Path(page.image_path)):
             raise ValueError('Graphic layout belongs to a different rendered source page')
         sx=page.width_pt/data['image_size'][0];sy=page.height_pt/data['image_size'][1]
-        page.regions=[{'category':r['category'],'key':r['key'],'bbox_pt':[r['bbox'][0]*sx,r['bbox'][1]*sy,r['bbox'][2]*sx,r['bbox'][3]*sy]} for r in data['regions']]
+        for region in data['regions']:
+            box=[region['bbox'][0]*sx,region['bbox'][1]*sy,region['bbox'][2]*sx,region['bbox'][3]*sy]
+            if not any(item['category']==region['category'] and item['bbox_pt']==box for item in page.regions):
+                page.regions.append({'category':region['category'],'key':region['key'],'bbox_pt':box})
         return page
 
     def extract(self, document, index: int, source_sha256: str) -> ExtractedPageData:
         page = document[index]
         cache = self.run_dir / "pages" / f"{index+1:05d}.json"
         image = self.run_dir / "images" / f"{index+1:05d}.jpg"
-        signature = {"version": PIPELINE_VERSION, "sha256": source_sha256, "dpi": self.dpi}
+        signature = {"version": PIPELINE_VERSION, "sha256": source_sha256, "dpi": self.dpi, "ocr": self.ocr_identity}
         if cache.exists() and image.exists():
             try:
                 saved = json.loads(cache.read_text(encoding="utf-8"))
@@ -148,13 +162,16 @@ class PageExtractor:
         page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=False).save(image, jpg_quality=88)
         lines = DigitalPdfIngestor.extract_native_lines(page)
         route, issues = native_quality(page, lines)
+        ocr_regions = []
         if route == "ocr":
             if self.ocr is None:
-                self.ocr = LocalOcr(self.threads)
+                self.ocr = LocalOcr(self.threads, self.ocr_settings)
             lines = self.ocr.recognize(image, scale)
+            ocr_regions = self.ocr.regions
+            issues.append("ocr_geometry_is_block_level")
             if not lines:
                 issues.append("ocr_no_text_review_image")
-            method = "rapidocr-onnx"
+            method = "PaddleOCR-VL-v1.6"
         else:
             method = "pymupdf" if route == "native" else "blank"
         # Normal page/figure images are useful graphic regions. A full-page scan
@@ -170,7 +187,7 @@ class PageExtractor:
         label, hint = DigitalPdfIngestor._detect_page_number_and_domain_hint(index, lines, page.rect.height)
         result = ExtractedPageData(index+1, index, page.get_label(), page.rect.width,
                                    page.rect.height, len(page.get_images()), lines,
-                                   label, hint, method, str(image.resolve()), graphics, issues)
+                                   label, hint, method, str(image.resolve()), graphics, issues, ocr_regions)
         result=refine_graphic_page(result)
         result=self.attach_regions(result)
         atomic_json(cache, {"signature": signature, "page": asdict(result), "route": route,

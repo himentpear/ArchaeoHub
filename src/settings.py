@@ -24,4 +24,10 @@ def load_settings(path: Path | None = None) -> dict:
                 "LOCAL_TOC_ENABLED","LOCAL_TOC_MODEL_PATH","MAX_LOCAL_TOC_NODES",
                 "LOCAL_TOC_BATCH_SIZE","MAX_LOCAL_TOC_BATCHES","LOCAL_TOC_BATCH_TIMEOUT"]:
         if key in os.environ:values[key]=os.environ[key]
+    for key in ["LOCAL_LLM_BASE_URL", "LOCAL_LLM_MODEL", "LOCAL_LLM_API_KEY", "LOCAL_LLM_RESPONSE_FORMAT",
+                "LOCAL_LLM_TIMEOUT", "LOCAL_TOC_BASE_URL", "LOCAL_TOC_MODEL", "LOCAL_TOC_API_KEY",
+                "LOCAL_TOC_RESPONSE_FORMAT", "LLM_BASE_URL", "LLM_MODEL", "LLM_API_KEY", "LLM_RESPONSE_FORMAT",
+                "OCR_BASE_URL", "OCR_MODEL", "OCR_API_KEY", "OCR_TIMEOUT", "OCR_MAX_TOKENS", "OCR_MAX_PIXELS"]:
+        if key in os.environ:
+            values[key] = os.environ[key]
     return values

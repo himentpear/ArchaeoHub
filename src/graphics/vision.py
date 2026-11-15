@@ -150,26 +150,67 @@ def recover_grid_cells(image):
     for c in cells:
         key=(c['row'],c['column'])
         if key not in unique or c['row_span']*c['column_span']>unique[key]['row_span']*unique[key]['column_span']:unique[key]=c
+    corner=diagonal_header_cell(list(unique.values()),binary,xs,ys,slope)
+    if corner is not None:unique[0,0]=corner
     return sorted(unique.values(),key=lambda c:(c["row"],c["column"]))
+
+
+def diagonal_header_cell(cells,binary,xs,ys,slope):
+    """Retain a diagonal corner as one source-backed header bounding region."""
+    if not cells or any(cell['row']==0 and cell['column']==0 for cell in cells):return None
+    top=[cell for cell in cells if cell['row']==0]
+    left=[cell for cell in cells if cell['column']==0]
+    if not top or not left:return None
+    columns=min(cell['column'] for cell in top)
+    rows=min(cell['row'] for cell in left)
+    if not columns or not rows:return None
+    if any(cell['row']<rows and cell['column']<columns for cell in cells):return None
+    height,width=binary.shape
+    shift=slope*((ys[0]+ys[rows])/2-height/2)
+    x0,x1=[max(0,min(width,int(round(value+shift)))) for value in (xs[0],xs[columns])]
+    y0,y1=[max(0,min(height,int(round(value)))) for value in (ys[0],ys[rows])]
+    if min(x1-x0,y1-y0)<15:return None
+    margin=max(3,min(x1-x0,y1-y0)//30)
+    edges=[binary[max(0,y-margin):min(height,y+margin+1),x0:x1].any(axis=0) for y in (y0,y1)]
+    edges.extend(binary[y0:y1,max(0,x-margin):min(width,x+margin+1)].any(axis=1) for x in (x0,x1))
+    if any(np.mean(edge)<.8 for edge in edges):return None
+    crop=binary[y0:y1,x0:x1]
+    lines=cv2.HoughLinesP(crop,1,np.pi/180,threshold=30,minLineLength=min(crop.shape)*.6,maxLineGap=10)
+    diagonal=False
+    for ax,ay,bx,by in np.asarray(lines).reshape(-1,4) if lines is not None else []:
+        if ax>bx:ax,ay,bx,by=bx,by,ax,ay
+        angle=np.degrees(np.arctan2(by-ay,bx-ax))
+        if (10<angle<80 and ax<crop.shape[1]*.2 and ay<crop.shape[0]*.2
+                and (bx>crop.shape[1]*.8 or by>crop.shape[0]*.8)):
+            diagonal=True;break
+    if not diagonal:return None
+    return {'row':0,'column':0,'row_span':rows,'column_span':columns,'bbox':[x0,y0,x1,y1],
+            'method':'grid','geometry_level':'grid_axes','diagonal_header':True}
 
 
 class TableHTML(HTMLParser):
     def __init__(self):
-        super().__init__();self.cells=[];self.row=-1;self.column=0;self.occupied=set();self.current=None
+        super().__init__();self.cells=[];self.row=-1;self.column=0;self.occupied=set();self.current=None;self.section=None
     def handle_starttag(self,tag,attrs):
+        if tag in {'thead','tbody','tfoot'}:self.section=tag
+        if tag=='br' and self.current is not None:self.current['text']+='\n'
         if tag=="tr":self.row+=1;self.column=0
         if tag not in {"td","th"}:return
         attrs=dict(attrs)
         while (self.row,self.column) in self.occupied:self.column+=1
         rs=max(1,min(1000,int(attrs.get("rowspan",1))));cs=max(1,min(1000,int(attrs.get("colspan",1))))
-        self.current={"row":max(0,self.row),"column":self.column,"row_span":rs,"column_span":cs,"text":"","header":tag=="th"}
+        self.current={"row":max(0,self.row),"column":self.column,"row_span":rs,"column_span":cs,"text":"","header":tag=="th",
+            'header_section':self.section,'scope':attrs.get('scope')}
         for r in range(max(0,self.row),max(0,self.row)+rs):
             for c in range(self.column,self.column+cs):self.occupied.add((r,c))
         self.column+=cs
     def handle_data(self,data):
         if self.current is not None:self.current["text"]+=data
     def handle_endtag(self,tag):
+        if tag in {'thead','tbody','tfoot'}:self.section=None
+        if tag in {'p','div'} and self.current is not None and not self.current['text'].endswith('\n'):self.current['text']+='\n'
         if tag in {"td","th"} and self.current is not None:
+            self.current['text']=self.current['text'].strip()
             self.cells.append(self.current);self.current=None
 
 
@@ -205,10 +246,5 @@ def classify_ink(image):
 
 
 def header_rows(cells):
-    rows=sorted({c["row"] for c in cells})
-    for r in rows:
-        row=[c for c in cells if c["row"]==r]
-        units=[c for c in row if re.match(r"^(?:T|H|Y|M|F)\d+",c.get("text",""))]
-        if any(c.get("symbols") and c.get('value_kind')=='symbol' for c in row) or (r>0 and len(units)==1 and units[0]['column']<=1):
-            return min(r,4)
-    return min(1,len(rows))
+    from src.graphics.tables import infer_header_rows
+    return infer_header_rows(cells)

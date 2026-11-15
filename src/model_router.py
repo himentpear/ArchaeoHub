@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 from src.ingest.page_pipeline import atomic_json, job_lock
+from src.model_api import OpenAIEndpoint
 
 SCHEMA={"type":"object","additionalProperties":False,"required":["entities"],"properties":{
     "entities":{"type":"array","maxItems":100,"items":{"type":"object","additionalProperties":False,
@@ -100,18 +101,27 @@ class ModelRouter:
         local_path=Path(settings["LOCAL_MODEL_PATH"]) if settings.get("LOCAL_MODEL_PATH") else None
         router=cls(cache_dir,local_model=local_path if local_path and local_path.exists() else None,
             allow_cloud=settings.get("ALLOW_CLOUD_FALLBACK","false").lower()=="true",
-            model=settings.get("DEEPSEEK_MODEL","deepseek-flash"),
-            base_url=settings.get("DEEPSEEK_BASE_URL","https://api.deepseek.com"),
+            model=settings.get("LLM_MODEL") or settings.get("DEEPSEEK_MODEL","deepseek-flash"),
+            base_url=settings.get("LLM_BASE_URL") or settings.get("DEEPSEEK_BASE_URL","https://api.deepseek.com"),
             max_calls=int(settings.get("MAX_CLOUD_CALLS_PER_DOCUMENT","20")),
             max_total_tokens=int(settings.get("MAX_CLOUD_TOKENS_PER_DOCUMENT","50000")),
-            threads=int(settings.get("LOCAL_MODEL_THREADS","4")))
-        router.key=settings.get("DEEPSEEK_API_KEY") or None
+            threads=int(settings.get("LOCAL_MODEL_THREADS","4")),
+            local_base_url=settings.get("LOCAL_LLM_BASE_URL"),
+            local_api_model=settings.get("LOCAL_LLM_MODEL"),
+            local_api_key=settings.get("LOCAL_LLM_API_KEY"),
+            local_response_format=settings.get("LOCAL_LLM_RESPONSE_FORMAT", "json_schema"),
+            local_timeout=float(settings.get("LOCAL_LLM_TIMEOUT", "150")),
+            cloud_response_format=settings.get("LLM_RESPONSE_FORMAT", "json_object"))
+        router.key=settings.get("LLM_API_KEY") or settings.get("DEEPSEEK_API_KEY") or None
         return router
 
     def __init__(self, cache_dir: Path, *, local_model: Path | None = None,
                  api_key_file: Path | None = None, allow_cloud: bool = False,
                  model: str = "deepseek-flash", base_url: str = "https://api.deepseek.com",
-                 max_calls: int = 20, max_total_tokens: int = 50000, threads: int = 4):
+                 max_calls: int = 20, max_total_tokens: int = 50000, threads: int = 4,
+                 local_base_url: str | None = None, local_api_model: str | None = None,
+                 local_api_key: str | None = None, local_response_format: str = "json_schema",
+                 local_timeout: float = 150, cloud_response_format: str = "json_object"):
         self.cache=cache_dir
         self.cache.mkdir(parents=True,exist_ok=True)
         self.local_model=local_model
@@ -123,6 +133,18 @@ class ModelRouter:
         self.max_total_tokens=max_total_tokens
         self.threads=threads
         self.llm=None
+        self.local_endpoint = None
+        if local_base_url or local_model:
+            self.local_endpoint = OpenAIEndpoint(
+                local_base_url or "http://127.0.0.1:18081/v1",
+                local_api_model or (local_model.name if local_model else "local-model"),
+                local_api_key, local_response_format, local_timeout,
+            )
+        self.cloud_response_format = cloud_response_format
+
+    @property
+    def local_available(self):
+        return self.local_endpoint is not None
 
     def _budget_reserve(self, reserve_tokens: int):
         path=self.cache/"usage.json"
@@ -142,40 +164,19 @@ class ModelRouter:
             usage["events"].append(event)
             atomic_json(path,usage)
 
-    def _cloud(self, messages: list, *, structured: bool = True, max_tokens: int = 1200) -> dict:
+    def _cloud(self, messages: list, *, structured: bool = True, max_tokens: int = 1200, schema=None) -> dict:
         if not self.allow_cloud or not self.key:
             raise RuntimeError("Cloud fallback unavailable")
-        import httpx
         # Conservative text bound plus image allowance; request count includes retries.
         reserve=len(json.dumps(messages,ensure_ascii=False))+max_tokens
         if any(isinstance(m.get("content"),list) for m in messages):
             # Base64 length isn't a token count. Bound each image separately.
             reserve=sum(len(str(m.get("content",""))) for m in messages if isinstance(m.get("content"),str))+max_tokens+2048
-        for attempt in range(3):
-            self._budget_reserve(reserve)
-            payload={"model":self.model,"messages":messages,"max_tokens":max_tokens,"temperature":0}
-            if self.model.startswith("deepseek"):
-                payload["thinking"]={"type":"disabled"}
-            if structured:
-                payload["response_format"]={"type":"json_object"}
-            try:
-                response=httpx.post(self.base_url+"/chat/completions",headers={"Authorization":"Bearer "+self.key},json=payload,timeout=90)
-                if response.status_code in (429,500,502,503,504):
-                    if attempt<2:
-                        time.sleep(2**attempt)
-                        continue
-                if response.status_code!=200:
-                    raise RuntimeError(f"Provider returned HTTP {response.status_code}")
-                data=response.json()
-                self._record_usage(data)
-                if data["choices"][0].get("finish_reason")=="length":
-                    raise ValueError("Provider output truncated")
-                return data
-            except (httpx.TimeoutException,httpx.NetworkError):
-                if attempt==2:
-                    raise RuntimeError("Provider network failure") from None
-                time.sleep(2**attempt)
-        raise RuntimeError("Provider retries exhausted")
+        format = self.cloud_response_format if schema is not None else "json_object"
+        endpoint = OpenAIEndpoint(self.base_url, self.model, self.key, format, timeout=90, attempts=3)
+        extra = {"thinking": {"type": "disabled"}} if self.model.startswith("deepseek") else {}
+        return endpoint.complete(messages, schema=(schema or {}) if structured else None, max_tokens=max_tokens,
+            before_request=lambda: self._budget_reserve(reserve), on_response=self._record_usage, extra=extra)
 
     def extract_entities(self, source: str, *, force_cloud: bool = False) -> dict:
         if len(source)>3500:
@@ -188,7 +189,8 @@ class ModelRouter:
                 "text必须逐字出现在原文，不得复述。没有证据则entities为空。/no_think")
         local_identity={"path":str(self.local_model),"size":self.local_model.stat().st_size,
                         "mtime_ns":self.local_model.stat().st_mtime_ns} if self.local_model else None
-        identity={"schema":EXTRACTION_SCHEMA,"prompt":prompt,"local_model":local_identity,"model":self.model,
+        identity={"schema":EXTRACTION_SCHEMA,"prompt":prompt,"local_model":local_identity,
+                  "local_api": self.local_endpoint.identity if self.local_endpoint else None,"model":self.model,
                   "endpoint":self.base_url,"force_cloud":force_cloud,"version":3}
         key=hashlib.sha256(json.dumps(identity,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
         cache=self.cache/(key+".json")
@@ -197,24 +199,21 @@ class ModelRouter:
             validate_entities(saved["result"],source)
             return {**saved,"cached":True}
         errors=[]
-        if self.local_model and not force_cloud:
+        if self.local_endpoint and not force_cloud:
             try:
-                if self.llm is None:
-                    from llama_cpp import Llama
-                    self.llm=Llama(model_path=str(self.local_model),n_ctx=4096,n_threads=self.threads,verbose=False)
-                response=self.llm.create_chat_completion(messages=[{"role":"user","content":prompt}],
-                    response_format={"type":"json_object","schema":EXTRACTION_SCHEMA},temperature=0,max_tokens=800)
+                response = self.local_endpoint.complete([{"role":"user","content":prompt}],
+                                                        schema=EXTRACTION_SCHEMA, max_tokens=800)
                 content=response["choices"][0]["message"]["content"]
                 self.last_local_response=content
                 result=ground_surfaces(json.loads(content),source)
-                saved={"provider":"local","model":self.local_model.name,"result":result}
+                saved={"provider":"local","model":self.local_endpoint.model,"result":result}
                 atomic_json(cache,saved)
                 return saved
             except Exception as error:
                 errors.append(type(error).__name__)
                 self.last_local_error_type=type(error).__name__
         if self.allow_cloud:
-            response=self._cloud([{"role":"user","content":prompt}])
+            response=self._cloud([{"role":"user","content":prompt}], schema=EXTRACTION_SCHEMA)
             self.last_cloud_response=response["choices"][0]["message"]["content"]
             result=ground_surfaces(json.loads(self.last_cloud_response),source)
             saved={"provider":"deepseek","model":self.model,"result":result,"local_errors":errors}
@@ -235,6 +234,7 @@ class ModelRouter:
         identity = {
             "version": VERSION, "prompt": prompt, "schema": MODEL_SCHEMA,
             "local_model": local_identity, "model": self.model,
+            "local_api": self.local_endpoint.identity if self.local_endpoint else None,
             "endpoint": self.base_url, "force_cloud": force_cloud,
         }
         key = hashlib.sha256(json.dumps(identity, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
@@ -243,25 +243,18 @@ class ModelRouter:
             saved = json.loads(cache.read_text(encoding="utf-8"))
             validate(saved["result"], MODEL_SCHEMA)
             return {**saved, "cached": True}
-        if self.local_model and not force_cloud:
+        if self.local_endpoint and not force_cloud:
             try:
-                if self.llm is None:
-                    from llama_cpp import Llama
-                    self.llm = Llama(model_path=str(self.local_model), n_ctx=4096,
-                                     n_threads=self.threads, verbose=False)
-                response = self.llm.create_chat_completion(
-                    messages=[{"role": "user", "content": prompt}],
-                    response_format={"type": "json_object", "schema": MODEL_SCHEMA},
-                    temperature=0, max_tokens=1600,
-                )
-                provider, model = "local", self.local_model.name
+                response = self.local_endpoint.complete([{"role": "user", "content": prompt}],
+                                                        schema=MODEL_SCHEMA, max_tokens=1600)
+                provider, model = "local", self.local_endpoint.model
             except Exception:
                 if not self.allow_cloud:
                     raise RuntimeError("Local attribute extraction failed") from None
-                response = self._cloud([{"role": "user", "content": prompt}], max_tokens=1800)
+                response = self._cloud([{"role": "user", "content": prompt}], max_tokens=1800, schema=MODEL_SCHEMA)
                 provider, model = "cloud", self.model
         else:
-            response = self._cloud([{"role": "user", "content": prompt}], max_tokens=1800)
+            response = self._cloud([{"role": "user", "content": prompt}], max_tokens=1800, schema=MODEL_SCHEMA)
             provider, model = "cloud", self.model
         if response["choices"][0].get("finish_reason") == "length":
             raise ValueError("Attribute extraction output truncated")

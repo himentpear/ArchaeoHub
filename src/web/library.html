@@ -394,10 +394,23 @@
       margin-bottom: 12px;
       box-shadow: 0 1px 4px rgba(0,0,0,0.03);
       display: grid;
-      grid-template-columns: 1fr auto;
+      grid-template-columns: minmax(240px, 1fr) minmax(0, 2fr);
       gap: 16px;
     }
     .artifact-card:hover { border-color: #9ab8aa; box-shadow: 0 3px 10px rgba(0,0,0,0.07); }
+    .artifact-card.text-only { grid-template-columns: 1fr; }
+    .art-info { min-width: 0; }
+    .art-info .occ-list { max-height: 300px; overflow: auto; }
+    .art-visuals { min-width: 0; }
+    .art-primary-image { width: 100%; height: 310px; object-fit: contain; background: #fff; cursor: zoom-in; }
+    .art-primary-label { color: #425750; font-size: 12px; margin: 6px 0; }
+    .source-label { color: #285d4c; background: #edf4f0; margin-right: 6px; }
+    .source-label[data-source="caption"] { color: #405b83; background: #edf1f9; }
+    .source-label[data-source="table"] { color: #77582b; background: #f6f0e5; }
+    @media (max-width: 1050px) {
+      .artifact-card { grid-template-columns: 1fr; }
+      .art-primary-image { height: 260px; }
+    }
     .art-head {
       display: flex;
       align-items: center;
@@ -447,7 +460,7 @@
       gap: 8px;
       align-items: center;
       flex-wrap: wrap;
-      max-width: 350px;
+      max-width: 100%;
     }
     .art-thumb-box {
       width: 104px;
@@ -1042,6 +1055,13 @@
       transition: transform 0.1s ease, filter 0.15s ease;
       pointer-events: none;
     }
+    .wb-image-layer { position: relative; flex-shrink: 0; }
+    .wb-image-layer img { width: 100%; height: 100%; display: block; }
+    .wb-arrow-layer { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+    .wb-arrow-layer.editing { cursor: crosshair; }
+    .wb-arrow-layer line { stroke: #c34527; stroke-width: 3; vector-effect: non-scaling-stroke; }
+    .wb-arrow-layer .selected-arrow { stroke: #197eaa; }
+    .wb-arrow-layer circle { fill: #fff; stroke: #197eaa; stroke-width: 2; vector-effect: non-scaling-stroke; cursor: move; }
     .wb-card-foot {
       padding: 6px 10px;
       background: #fff;
@@ -1241,6 +1261,7 @@
       <button class="nav-tab active" data-view="index">🧭 跨卷总索引</button>
       <button class="nav-tab" data-view="gallery">🖼️ 考古图版展厅</button>
       <button class="nav-tab" data-view="reader">📖 文献逐页阅览</button>
+      <button id="tableJobsBtn">表格任务</button>
     </div>
   </header>
 
@@ -1321,6 +1342,7 @@
           <button class="facet-tab" data-facet="lines">📖 全文原句命中 (<span id="cntFacetLines">0</span>)</button>
           <button class="facet-tab" data-facet="figures">🖼️ 图版与线图命中 (<span id="cntFacetFigs">0</span>)</button>
           <button class="facet-tab" data-facet="toc">📑 章节与图版目录 (<span id="cntFacetToc">0</span>)</button>
+          <button id="artifactIssuesBtn">编号问题</button>
         </div>
 
         <div class="index-results-area">
@@ -1595,6 +1617,7 @@
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
           <button id="modalJumpBtn" class="primary figure-btn" style="flex:0 0 auto; padding:6px 16px;">📖 在原书原页中定位该图</button>
           <button id="modalAddCompareBtn" class="gold-btn figure-btn" style="flex:0 0 auto; padding:6px 16px;">⚖️ 加入器物比对槽</button>
+          <button id="modalCropBtn" class="figure-btn" style="flex:0 0 auto; padding:6px 16px;">单器物精确切分</button>
           <span class="muted">提示：若该图版含多件器物，可点击下方单件器物切片切换预览</span>
         </div>
         <div id="modalSubFigs" class="modal-subfigs" style="display:none;"></div>
@@ -1611,6 +1634,12 @@
 
     // Comparison state
     let compareList = [];
+    try {
+      const saved = JSON.parse(localStorage.getItem('archaeohub-comparison-v1') || '[]');
+      if (Array.isArray(saved)) compareList = saved.filter(item =>
+        item && typeof item.id === 'string' && typeof item.image_url === 'string'
+        && item.image_url.startsWith('/api/')).slice(0, 100);
+    } catch { /* A browser with disabled storage can still use the workbench. */ }
     let wbActiveMode = 'canvas';
     let wbTopZ = 20;
     let draggedCardPayload = null;
@@ -1623,6 +1652,82 @@
       return d;
     };
     function notice(text) { $('notice').textContent = text; }
+    $('tableJobsBtn').onclick = async () => {
+      const dialog = document.createElement('dialog');
+      dialog.style.cssText = 'width:88vw;max-width:1050px;max-height:85vh;overflow:auto;padding:20px';
+      const heading = document.createElement('h3'); heading.textContent = '表格处理与部署';
+      const close = document.createElement('button'); close.textContent = '关闭';
+      close.onclick = () => dialog.close();
+      const body = document.createElement('div');
+      dialog.append(heading, close, body);
+      const statuses = {discovering:'正在判表',recognizing:'正在识别并入库',complete:'已完成',
+        recognition_failed:'识别失败，等待重试',deployment_failed:'部署异常',paused:'已暂停'};
+      async function refresh() {
+        try {
+          const jobs = await request('/api/table_jobs');
+          if (!dialog.open) return;
+          body.replaceChildren();
+          if (!jobs.length) { body.textContent = '当前没有登记的表格任务。'; return; }
+          for (const job of jobs) {
+            const section = document.createElement('section'); section.style.cssText = 'padding:16px 0;border-bottom:1px solid #ccd5ce';
+            const title = document.createElement('h4'); title.textContent = statuses[job.status] || job.status;
+            const progress = document.createElement('p');
+            progress.textContent = `已扫描 ${job.scanned_pages || 0} 页，页面已入库 ${job.deployed_pages || 0} / ${job.expected_pages || 0}，已生成 ${job.tables || 0} 张逻辑表、${job.records || 0} 条记录。`;
+            section.append(title, progress);
+            if (job.semantic_review) {
+              const review = document.createElement('p');
+              const summary = job.semantic_review;
+              review.textContent = `自动语义复核 ${summary.completed || 0} / ${summary.total || 0} 张，失败 ${summary.failed || 0} 张。`;
+              section.append(review);
+            }
+            if (job.deployment_error || job.failure) {
+              const error = document.createElement('p'); error.textContent = job.deployment_error || `物理页 ${job.failure.page} · ${job.failure.error_type}`;
+              section.append(error);
+            }
+            if (job.inventory) {
+              const inventory = document.createElement('a'); inventory.href = job.inventory; inventory.textContent = '下载表格清单';
+              section.append(inventory);
+            }
+            for (const documentInfo of job.documents || []) {
+              const label = document.createElement('p');
+              const documentEntry = docs.find(item => item.id === documentInfo.manifest_id);
+              label.textContent = `${documentEntry?.short_title || documentEntry?.title || documentInfo.manifest_id} · ${documentInfo.table_regions} 个表格区域`;
+              section.append(label);
+              if (!job.runs?.[documentInfo.manifest_id]) continue;
+              const tables = await request('/api/graphics?manifest=' + encodeURIComponent(documentInfo.manifest_id));
+              if (!dialog.open) return;
+              for (const table of tables.filter(item => item.run_id === job.runs[documentInfo.manifest_id])) {
+                const button = document.createElement('button'); button.textContent = table.title || table.label || '查看表格';
+                button.onclick = () => { dialog.close(); openGraphic(table.id).catch(error => notice(error.message)); };
+                section.append(button);
+              }
+            }
+            body.append(section);
+          }
+        } catch (error) { if (dialog.open) body.textContent = error.message; }
+      }
+      document.body.append(dialog); dialog.showModal();
+      const timer = setInterval(refresh, 15000);
+      dialog.addEventListener('close', () => { clearInterval(timer); dialog.remove(); }, {once:true});
+      await refresh();
+    };
+    function escapeHtml(value) {
+      const node = document.createElement('span');
+      node.textContent = value ?? '';
+      return node.innerHTML.replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+    }
+    function saveComparison() {
+      try { localStorage.setItem('archaeohub-comparison-v1', JSON.stringify(compareList)); }
+      catch { notice('比对状态暂时无法保存，请检查浏览器存储空间。'); }
+    }
+
+    function sourceBadge(type, label) {
+      const badge = document.createElement('span');
+      badge.className = 'badge source-label';
+      badge.dataset.source = type || 'unknown';
+      badge.textContent = label || ({body:'正文描述',caption:'图注',table:'表格',footnote:'脚注',heading:'标题'})[type] || '待判定';
+      return badge;
+    }
 
     function switchMainView(viewName) {
       document.querySelectorAll('.nav-tab').forEach(t => {
@@ -2054,17 +2159,18 @@
         let crossBadge = art.volume_count > 1
           ? `<span class="badge badge-cross">🔗 跨 ${art.volume_count} 卷图文联动</span>`
           : '';
-        let unitBadge = art.unit ? `<span class="badge badge-unit">单位: ${art.unit}</span>` : '';
+        let unitBadge = art.unit ? `<span class="badge badge-unit">单位 ${escapeHtml(art.unit)}</span>` : '';
 
         let thumbOccs = art.occurrences.filter(o => o.thumb_url);
         let compareAllBtnHtml = thumbOccs.length > 0
           ? `<button class="gold-btn compare-art-btn" style="font-size:11.5px; padding:2px 9px; margin-left:auto;">⚖️ 跨卷图像同台比对 (${thumbOccs.length}图)</button>`
           : '';
 
+        left.className = 'art-info';
         left.innerHTML = `
           <div class="art-head">
-            <span class="art-code">${art.code}</span>
-            <span class="art-name">${art.vessel_name || '出土器物标本'}</span>
+            <span class="art-code"></span>
+            <span class="art-name"></span>
             ${crossBadge}
             ${unitBadge}
             ${volBadges}
@@ -2072,12 +2178,18 @@
           </div>
           <div class="occ-list"></div>
         `;
+        left.querySelector('.art-code').textContent = art.code;
+        left.querySelector('.art-name').textContent = art.vessel_name || '出土器物标本';
+        thumbOccs = thumbOccs.filter((occ, index, all) =>
+          all.findIndex(other => other.thumb_url === occ.thumb_url) === index
+        ).sort((a, b) => Number(Boolean(b.is_precise_crop)) - Number(Boolean(a.is_precise_crop))
+          || Number(b.media_type === 'line_drawing') - Number(a.media_type === 'line_drawing'));
 
         if (thumbOccs.length > 0) {
           left.querySelector('.compare-art-btn').onclick = () => {
             for (let tOcc of thumbOccs) {
               addToCompare({
-                id: `${tOcc.manifest_id}:${tOcc.canvas_id}:${tOcc.xywh || tOcc.figure_number}`,
+                id: `${tOcc.manifest_id}:${tOcc.canvas_id}:${tOcc.image_xywh || tOcc.xywh || tOcc.figure_number}`,
                 manifest_id: tOcc.manifest_id,
                 short_title: tOcc.short_title,
                 canvas_id: tOcc.canvas_id,
@@ -2087,7 +2199,7 @@
                 title: `${art.code} ${art.vessel_name || ''} (${tOcc.short_title})`,
                 caption: tOcc.snippet,
                 category: tOcc.role === 'drawing' ? 'line_drawing' : 'sub_plate',
-                xywh: tOcc.xywh,
+                xywh: tOcc.image_xywh || tOcc.xywh,
                 image_url: tOcc.thumb_url
               }, false);
             }
@@ -2099,30 +2211,25 @@
         attributeLinks.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin:8px 0';
         for (let record of art.attribute_records || []) {
           let button = document.createElement('button');
-          button.textContent = '属性与证据 · ' + record.short_title + (record.review_status === 'needs_review' ? ' · 待审' : '');
+          button.textContent = '属性、编号与证据 · ' + record.short_title + (record.review_status === 'needs_review' ? ' · 待审' : '');
           button.onclick = () => openArtifactAttributes(record.id).catch(e => notice(e.message));
           attributeLinks.append(button);
         }
         left.insertBefore(attributeLinks, left.querySelector('.occ-list'));
+        const agentButton = document.createElement('button'); agentButton.textContent = 'Agent核查（试验）';
+        agentButton.onclick = () => openAgentCheck(art.code, art.source_namespace, art.attribute_records[0].id).catch(error => notice(error.message));
+        attributeLinks.append(agentButton);
         let occList = left.querySelector('.occ-list');
         for (let occ of art.occurrences) {
           let row = document.createElement('div');
           row.className = 'occ-item';
-          let roleTag = occ.role === 'plate'
-            ? '<span class="badge" style="background:#e3f1ec;color:#1b5748;">彩色图版</span>'
-            : (occ.role === 'drawing'
-              ? '<span class="badge" style="background:#eef0f8;color:#34497a;">线图</span>'
-              : '<span class="badge" style="background:#f3f1eb;color:#5c5346;">正文叙述</span>');
           let pLabel = occ.printed_page ? `第 ${occ.printed_page} 页` : `物理页 ${occ.scan_index}`;
-          row.innerHTML = `
-            <div class="occ-text">
-              <strong>[${occ.short_title} · ${pLabel}]</strong> ${roleTag}
-              <span style="margin-left:4px;">${occ.snippet}</span>
-            </div>
-            <button class="occ-jump">📖 定位原页</button>
-          `;
+          row.innerHTML = '<div class="occ-text"><strong></strong><div></div></div><button class="occ-jump">定位原页</button>';
+          row.querySelector('strong').textContent = `${occ.short_title} · ${pLabel}`;
+          const evidence = row.querySelector('.occ-text div');
+          evidence.append(sourceBadge(occ.source_type, occ.source_label), document.createTextNode(occ.snippet));
           row.querySelector('.occ-jump').onclick = () => {
-            jumpToPage(occ.manifest_id, occ.canvas_id, occ.scan_index, occ.xywh, occ.role === 'text' ? 'text' : 'figure');
+            jumpToPage(occ.manifest_id, occ.canvas_id, occ.scan_index, occ.xywh, occ.source_type === 'image' ? 'figure' : 'text');
           };
           occList.appendChild(row);
         }
@@ -2131,10 +2238,15 @@
 
         if (thumbOccs.length > 0) {
           let right = document.createElement('div');
-          right.className = 'art-thumbs';
-          for (let tOcc of thumbOccs.slice(0, 3)) {
+          right.className = 'art-visuals';
+          const primary = document.createElement('img');
+          primary.className = 'art-primary-image'; primary.loading = 'lazy'; primary.alt = art.code;
+          const primaryLabel = document.createElement('p'); primaryLabel.className = 'art-primary-label';
+          const strip = document.createElement('div'); strip.className = 'art-thumbs';
+          right.append(primary, primaryLabel, strip);
+          for (let [imageIndex, tOcc] of thumbOccs.entries()) {
             let figObj = {
-              id: `${tOcc.manifest_id}:${tOcc.canvas_id}:${tOcc.xywh || tOcc.figure_number}`,
+              id: `${tOcc.manifest_id}:${tOcc.canvas_id}:${tOcc.image_xywh || tOcc.xywh || tOcc.figure_number}`,
               manifest_id: tOcc.manifest_id,
               short_title: tOcc.short_title,
               canvas_id: tOcc.canvas_id,
@@ -2144,18 +2256,26 @@
               title: `${art.code} ${art.vessel_name || ''}`,
               caption: tOcc.snippet,
               category: tOcc.role === 'drawing' ? 'line_drawing' : 'sub_plate',
-              xywh: tOcc.xywh,
+              xywh: tOcc.image_xywh || tOcc.xywh,
               image_url: tOcc.thumb_url
             };
+            figObj.artifact_records = art.attribute_records || [];
             let tBox = document.createElement('div');
             tBox.className = 'art-thumb-box';
             tBox.draggable = true;
             tBox.title = '点击放大查看器物图版，或直接拖拽至下方比对工作槽';
-            tBox.innerHTML = `
-              <img src="${tOcc.thumb_url}" loading="lazy" alt="${art.code}">
-              <div class="art-thumb-label">${tOcc.figure_number || tOcc.short_title}</div>
-            `;
-            tBox.onclick = () => openFigureModal(figObj, tOcc.short_title);
+            const image = document.createElement('img');
+            image.src = tOcc.thumb_url; image.loading = 'lazy'; image.alt = art.code;
+            const label = document.createElement('div'); label.className = 'art-thumb-label';
+            label.textContent = (tOcc.media_type === 'line_drawing' ? '线图 · ' : '照片 · ') + (tOcc.figure_number || tOcc.short_title);
+            tBox.append(image, label);
+            const selectImage = () => {
+              primary.src = tOcc.thumb_url;
+              primaryLabel.textContent = label.textContent;
+              primary.onclick = () => openFigureModal(figObj, tOcc.short_title);
+            };
+            tBox.onclick = selectImage;
+            if (imageIndex === 0) selectImage();
             tBox.addEventListener('dragstart', e => {
               draggedCardPayload = figObj;
               e.dataTransfer.setData('text/plain', figObj.id);
@@ -2165,9 +2285,11 @@
               draggedCardPayload = null;
               $('compareDock').classList.remove('drag-active');
             });
-            right.appendChild(tBox);
+            strip.appendChild(tBox);
           }
           card.appendChild(right);
+        } else {
+          card.classList.add('text-only');
         }
 
         box.appendChild(card);
@@ -2198,6 +2320,7 @@
         row.querySelector('.occ-jump').onclick = () => {
           jumpToPage(hit.manifest_id, hit.canvas_id, hit.scan_index, hit.xywh, 'text');
         };
+        row.querySelector('.occ-text').prepend(sourceBadge(hit.source_type, hit.source_label));
         box.appendChild(row);
       }
     }
@@ -2757,6 +2880,7 @@
     }
 
     function renderCompareDock() {
+      saveComparison();
       $('compareCount').textContent = compareList.length;
       let list = $('compareDockList');
       list.replaceChildren();
@@ -2768,8 +2892,8 @@
         let chip = document.createElement('div');
         chip.className = 'dock-thumb';
         chip.innerHTML = `
-          <img src="${item.image_url}" alt="${item.figure_number || ''}">
-          <span style="max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${item.title || item.figure_number}">${item.title || item.figure_number}</span>
+          <img src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.figure_number)}">
+          <span style="max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(item.title || item.figure_number)}">${escapeHtml(item.title || item.figure_number)}</span>
           <button class="dock-thumb-rm" title="移除">&times;</button>
         `;
         chip.querySelector('.dock-thumb-rm').onclick = () => {
@@ -2843,6 +2967,7 @@
     // Mode 1: Free 2D Lighttable Canvas with Pointer Dragging & Resizing
     function renderWorkbenchCanvas() {
       let container = $('wbFloatingContainer');
+      container.querySelectorAll('.wb-float-card').forEach(card => card.imageObserver?.disconnect());
       container.replaceChildren();
       if (!compareList.length) {
         container.innerHTML = '<div class="empty" style="color:#b8ccc4; padding-top:120px;">比对工作台暂无器物卡片。请先从展厅或跨卷索引中添加器物卡片。</div>';
@@ -2852,8 +2977,8 @@
       for (let item of compareList) {
         let fCard = document.createElement('div');
         fCard.className = 'wb-float-card';
-        fCard.style.left = (item.x || 40) + 'px';
-        fCard.style.top = (item.y || 40) + 'px';
+        fCard.style.left = (item.x ?? 40) + 'px';
+        fCard.style.top = (item.y ?? 40) + 'px';
         fCard.style.width = (item.w || 295) + 'px';
         fCard.style.height = (item.h || 340) + 'px';
         fCard.style.zIndex = item.z || 20;
@@ -2861,7 +2986,7 @@
         let pStr = item.printed_page ? `p.${item.printed_page}` : `#${item.scan_index}`;
         fCard.innerHTML = `
           <div class="wb-card-head" title="按住标题栏可在画布上任意自由拖动位置">
-            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">⠿ [${item.short_title || ''}] ${item.title || item.figure_number}</span>
+            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">⠿ [${escapeHtml(item.short_title)}] ${escapeHtml(item.title || item.figure_number)}</span>
             <button class="dock-thumb-rm wb-rm-btn" title="从比对台移除">&times;</button>
           </div>
           <div class="wb-card-tools">
@@ -2871,23 +2996,28 @@
             <button class="wb-tool-btn z-reset" title="1:1 复位">1:1</button>
             <button class="wb-tool-btn flip-btn ${item.flipX ? 'active' : ''}" title="水平镜像翻转（用于比对器物左右剖面）">🔄 镜像</button>
             <button class="wb-tool-btn inv-btn ${item.invert ? 'active' : ''}" title="反相增强（用于凸显墨线图细节）">◐ 反相</button>
+            <button class="wb-tool-btn arrow-btn" title="拖动画箭头，拖动圆点调整端点">↗ 箭头</button>
+            <button class="wb-tool-btn arrow-undo">撤销箭头</button>
+            <button class="wb-tool-btn arrow-delete">删除箭头</button>
             <button class="wb-tool-btn jump-btn" style="margin-left:auto;" title="定位至原书页面">📖 ${pStr}</button>
           </div>
           <div class="wb-card-stage" title="滚轮可缩放器物图像">
-            <img src="${item.image_url}" alt="${item.title || item.figure_number}">
+            <div class="wb-image-layer"><img src="${item.image_url}" alt="器物比对图"></div>
           </div>
-          <div class="wb-card-foot">${item.caption || ''}</div>
+          <div class="wb-card-foot">${escapeHtml(item.caption)}</div>
           <div class="wb-resize-handle" title="拖拽右下角可自由调整卡片大小"></div>
         `;
 
         let imgEl = fCard.querySelector('.wb-card-stage img');
+        let imageLayer = fCard.querySelector('.wb-image-layer');
         let zLabel = fCard.querySelector('.z-label');
         function applyTransform() {
           let sx = (item.scale || 1) * (item.flipX ? -1 : 1);
           let sy = item.scale || 1;
-          imgEl.style.transform = `scale(${sx}, ${sy})`;
+          imageLayer.style.transform = `scale(${sx}, ${sy})`;
           imgEl.style.filter = item.invert ? 'invert(1) contrast(1.15)' : 'none';
           zLabel.textContent = `${Math.round((item.scale || 1) * 100)}%`;
+          saveComparison();
         }
         applyTransform();
 
@@ -2916,6 +3046,7 @@
             headEl.releasePointerCapture(ev.pointerId);
             headEl.removeEventListener('pointermove', onMove);
             headEl.removeEventListener('pointerup', onUp);
+            saveComparison();
           };
           headEl.addEventListener('pointermove', onMove);
           headEl.addEventListener('pointerup', onUp);
@@ -2941,6 +3072,7 @@
             resizeEl.releasePointerCapture(ev.pointerId);
             resizeEl.removeEventListener('pointermove', onMove);
             resizeEl.removeEventListener('pointerup', onUp);
+            saveComparison();
           };
           resizeEl.addEventListener('pointermove', onMove);
           resizeEl.addEventListener('pointerup', onUp);
@@ -2980,7 +3112,121 @@
         };
 
         container.appendChild(fCard);
+        attachArrowEditor(fCard, item);
       }
+    }
+
+    function attachArrowEditor(card, item) {
+      const namespace = 'http://www.w3.org/2000/svg';
+      const layer = card.querySelector('.wb-image-layer');
+      const image = layer.querySelector('img');
+      const stage = card.querySelector('.wb-card-stage');
+      const svg = document.createElementNS(namespace, 'svg');
+      svg.classList.add('wb-arrow-layer');
+      svg.setAttribute('viewBox', '0 0 1000 1000');
+      svg.setAttribute('preserveAspectRatio', 'none');
+      svg.setAttribute('aria-label', '器物箭头标注');
+      layer.append(svg);
+      item.arrows = Array.isArray(item.arrows) ? item.arrows : [];
+      item.arrowUndo = Array.isArray(item.arrowUndo) ? item.arrowUndo : [];
+      let editing = false, selectedArrow = null;
+      const markerId = 'arrow-' + crypto.randomUUID();
+      function element(name, attributes, parent = svg) {
+        const node = document.createElementNS(namespace, name);
+        for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);
+        parent.append(node);
+        return node;
+      }
+      function remember() {
+        item.arrowUndo.push(structuredClone(item.arrows));
+        if (item.arrowUndo.length > 20) item.arrowUndo.shift();
+      }
+      function draw() {
+        svg.replaceChildren();
+        svg.style.pointerEvents = editing ? 'auto' : 'none';
+        svg.classList.toggle('editing', editing);
+        card.querySelector('.arrow-btn').classList.toggle('active', editing);
+        card.querySelector('.arrow-undo').disabled = !item.arrowUndo.length;
+        card.querySelector('.arrow-delete').disabled = !item.arrows.length;
+        const definitions = element('defs', {});
+        const marker = element('marker', {id:markerId, viewBox:'0 0 10 10', refX:9, refY:5,
+          markerWidth:8, markerHeight:8, orient:'auto-start-reverse'}, definitions);
+        element('path', {d:'M 0 0 L 10 5 L 0 10 z', fill:'#c34527'}, marker);
+        for (const arrow of item.arrows) {
+          const line = element('line', {x1:arrow.x1 * 1000, y1:arrow.y1 * 1000,
+            x2:arrow.x2 * 1000, y2:arrow.y2 * 1000, 'marker-end':`url(#${markerId})`});
+          line.dataset.arrow = arrow.id;
+          line.classList.toggle('selected-arrow', selectedArrow === arrow.id);
+          if (editing) {
+            for (const endpoint of ['1', '2']) {
+              const handle = element('circle', {cx:arrow['x' + endpoint] * 1000,
+                cy:arrow['y' + endpoint] * 1000, r:12});
+              handle.dataset.arrow = arrow.id; handle.dataset.endpoint = endpoint;
+            }
+          }
+        }
+      }
+      function fitImage() {
+        if (!image.naturalWidth) return;
+        const scale = Math.min((stage.clientWidth - 16) / image.naturalWidth,
+          (stage.clientHeight - 16) / image.naturalHeight);
+        layer.style.width = Math.max(1, image.naturalWidth * scale) + 'px';
+        layer.style.height = Math.max(1, image.naturalHeight * scale) + 'px';
+      }
+      image.addEventListener('load', fitImage);
+      card.imageObserver = new ResizeObserver(fitImage);
+      card.imageObserver.observe(stage);
+      fitImage();
+      card.querySelector('.arrow-btn').onclick = () => { editing = !editing; draw(); };
+      card.querySelector('.arrow-undo').onclick = () => {
+        if (item.arrowUndo.length) item.arrows = item.arrowUndo.pop();
+        selectedArrow = null; draw(); saveComparison();
+      };
+      card.querySelector('.arrow-delete').onclick = () => {
+        if (!item.arrows.length) return;
+        remember();
+        const identifier = selectedArrow || item.arrows[item.arrows.length - 1].id;
+        item.arrows = item.arrows.filter(arrow => arrow.id !== identifier);
+        selectedArrow = null; draw(); saveComparison();
+      };
+      function point(event) {
+        const rect = layer.getBoundingClientRect();
+        let x = (event.clientX - rect.left) / rect.width;
+        if (item.flipX) x = 1 - x;
+        return {x:Math.max(0, Math.min(1, x)), y:Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height))};
+      }
+      svg.addEventListener('pointerdown', event => {
+        if (!editing || event.button !== 0) return;
+        event.preventDefault(); event.stopPropagation();
+        const endpoint = event.target.dataset.endpoint || '2';
+        let arrow = item.arrows.find(value => value.id === event.target.dataset.arrow);
+        remember();
+        if (!arrow) {
+          const start = point(event);
+          arrow = {id:crypto.randomUUID(), x1:start.x, y1:start.y, x2:start.x, y2:start.y};
+          item.arrows.push(arrow);
+        }
+        selectedArrow = arrow.id;
+        svg.setPointerCapture(event.pointerId);
+        const move = next => {
+          const position = point(next);
+          arrow['x' + endpoint] = position.x; arrow['y' + endpoint] = position.y;
+          draw();
+        };
+        const finish = next => {
+          svg.releasePointerCapture(next.pointerId);
+          svg.removeEventListener('pointermove', move);
+          svg.removeEventListener('pointerup', finish);
+          svg.removeEventListener('pointercancel', finish);
+          item.arrows = item.arrows.filter(value => Math.hypot(value.x2 - value.x1, value.y2 - value.y1) > 0.005);
+          draw(); saveComparison();
+        };
+        svg.addEventListener('pointermove', move);
+        svg.addEventListener('pointerup', finish);
+        svg.addEventListener('pointercancel', finish);
+        draw();
+      });
+      draw();
     }
 
     // Auto-tile cards on canvas
@@ -2993,6 +3239,7 @@
         item.w = 295;
         item.h = 340;
       });
+      saveComparison();
       renderWorkbenchCanvas();
     };
 
@@ -3045,16 +3292,16 @@
         let typeBadge = item.category === 'line_drawing' ? '📐 器物/遗迹线图' : '🏺 彩色图版';
         col.innerHTML = `
           <div class="wb-card-head" style="cursor:default;">
-            <span>[${item.short_title || ''}] ${item.title || item.figure_number}</span>
+            <span>[${escapeHtml(item.short_title)}] ${escapeHtml(item.title || item.figure_number)}</span>
             <span style="font-size:11px; opacity:0.85;">${pStr}</span>
           </div>
           <div class="wb-sync-imgbox">
-            <img src="${item.image_url}" style="transform:scale(${syncScale})" alt="${item.title || item.figure_number}">
+            <img src="${escapeHtml(item.image_url)}" style="transform:scale(${syncScale})" alt="${escapeHtml(item.title || item.figure_number)}">
           </div>
           <div style="padding:12px 14px; font-size:12.5px; color:#2b3e38; flex:1; display:flex; flex-direction:column; justify-content:space-between;">
             <div>
-              <div style="margin-bottom:6px;"><span class="badge badge-unit">${typeBadge}</span> <span class="badge badge-vol">${item.figure_number || ''}</span></div>
-              <p style="line-height:1.5; margin-bottom:10px;">${item.caption || ''}</p>
+              <div style="margin-bottom:6px;"><span class="badge badge-unit">${typeBadge}</span> <span class="badge badge-vol">${escapeHtml(item.figure_number)}</span></div>
+              <p style="line-height:1.5; margin-bottom:10px;">${escapeHtml(item.caption)}</p>
             </div>
             <button class="figure-btn primary jump-sync-btn" style="flex:0 0 auto;">📖 在原书第 ${item.printed_page || item.scan_index} 页中定位</button>
           </div>
@@ -3239,6 +3486,250 @@
       $('overlay').append(rect);
     }
 
+    async function openAgentCheck(query, namespace, artifactId) {
+      $('agentCheckDialog')?.remove();
+      const dialog = document.createElement('dialog'); dialog.id = 'agentCheckDialog';
+      dialog.style.cssText = 'width:850px;max-width:90vw;max-height:88vh;overflow:auto;padding:24px';
+      const title = document.createElement('h3'); title.textContent = 'Agent核查 · ' + query;
+      const status = document.createElement('p'); status.textContent = '正在读取检索证据并核对编号、器类与尺寸…';
+      const close = document.createElement('button'); close.textContent = '关闭'; close.onclick = () => { dialog.close(); dialog.remove(); };
+      dialog.append(title, status, close); document.body.append(dialog); dialog.showModal();
+      let result;
+      try {
+        const run = await request('/api/agent_check', {method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({query, namespace, artifact_id:artifactId})});
+        result = run;
+        while (result.status === 'running' && dialog.isConnected) {
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          result = await request('/api/agent_run?id=' + encodeURIComponent(run.id));
+          if (result.status === 'running') status.textContent = '正在核查 · 已用时 '
+            + Math.round(Date.now() / 1000 - run.started_at) + ' 秒';
+        }
+      } catch (error) { status.textContent = error.message; return; }
+      if (!dialog.isConnected) return;
+      status.textContent = result.status === 'completed'
+        ? `${result.framework} · ${result.model} · ${result.seconds}秒 · 结果待核查`
+        : result.error || result.output || '核查未完成';
+      const output = document.createElement('p'); output.style.whiteSpace = 'pre-wrap'; output.textContent = result.output || '';
+      dialog.append(output);
+      for (const evidence of result.evidence || []) {
+        const row = document.createElement('p'); row.textContent = '[' + evidence.id + '] ' + evidence.quote + ' ';
+        const jump = document.createElement('button'); jump.textContent = '定位原页';
+        jump.onclick = () => { dialog.close(); dialog.remove(); jumpToPage(evidence.manifest_id, evidence.canvas_id,
+          evidence.scan_index, evidence.xywh, evidence.kind === 'image' ? 'figure' : 'text'); };
+        row.append(jump); dialog.append(row);
+      }
+    }
+
+    async function openRegionEditor(fig) {
+      const data = await request('/api/artifact_regions?canvas=' + encodeURIComponent(fig.canvas_id));
+      $('artifactRegionDialog')?.remove();
+      const dialog = document.createElement('dialog'); dialog.id = 'artifactRegionDialog';
+      dialog.style.cssText = 'width:1000px;max-width:94vw;max-height:92vh;overflow:auto;padding:20px';
+      const title = document.createElement('h3'); title.textContent = '单器物精确切分'; dialog.append(title);
+      const instructions = document.createElement('p');
+      instructions.textContent = '在原页上拖框，选择对应器号后保存。可为同件器物保存多个视图。'; dialog.append(instructions);
+      function field(label, control) {
+        control.setAttribute('aria-label', label);
+        const row = document.createElement('label'); row.style.cssText = 'display:inline-flex;gap:8px;margin:8px 14px 8px 0;align-items:center';
+        row.append(document.createTextNode(label), control); dialog.append(row); return control;
+      }
+      const artifacts = field('器物', document.createElement('select'));
+      const records = [...data.artifacts, ...(fig.artifact_records || [])];
+      const seen = new Set();
+      for (const record of records) {
+        if (seen.has(record.id)) continue;
+        seen.add(record.id);
+        artifacts.append(new Option((record.artifact_no || record.original_artifact_no) + ' ' + (record.short_title || ''), record.id));
+      }
+      const currentArtifact = (fig.artifact_records || []).find(record => data.artifacts.some(item => item.id === record.id));
+      if (currentArtifact) artifacts.value = currentArtifact.id;
+      const existing = field('切片', document.createElement('select'));
+      existing.append(new Option('新切片', ''));
+      for (const region of data.regions) existing.append(new Option((region.view_label || '器物切片')
+        + (region.status === 'rejected' ? '（已撤回）' : ''), region.id));
+      const view = field('视图', document.createElement('input')); view.placeholder = '如口沿、正视、底视'; view.maxLength = 128;
+      const media = field('图像类型', document.createElement('select'));
+      media.append(new Option('线图', 'line_drawing'), new Option('照片', 'photo'));
+      media.value = fig.category === 'line_drawing' ? 'line_drawing' : 'photo';
+      const coordinates = field('x、y、宽、高', document.createElement('input')); coordinates.style.width = '220px';
+      const actor = field('审校人', document.createElement('input')); actor.value = $('actor').value; actor.maxLength = 128;
+      const note = field('裁切依据', document.createElement('input')); note.maxLength = 255;
+      const controls = document.createElement('div'); controls.style.cssText = 'display:flex;gap:10px;margin:8px 0'; dialog.append(controls);
+      const feedback = document.createElement('p'); dialog.append(feedback);
+      const stage = document.createElement('div'); stage.style.cssText = 'position:relative;width:100%;line-height:0;touch-action:none';
+      const image = document.createElement('img'); image.src = data.canvas.image_url; image.alt = '器物裁切原页'; image.style.cssText = 'display:block;width:100%;height:auto';
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('viewBox', `0 0 ${data.canvas.width} ${data.canvas.height}`);
+      svg.setAttribute('aria-label', '单器物裁框');
+      svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;touch-action:none';
+      const rectangle = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rectangle.setAttribute('fill', '#efb83d44'); rectangle.setAttribute('stroke', '#c34527');
+      rectangle.setAttribute('stroke-width', '3'); rectangle.setAttribute('vector-effect', 'non-scaling-stroke');
+      svg.append(rectangle); stage.append(image, svg); dialog.append(stage);
+      function draw() {
+        const values = coordinates.value.split(',').map(Number);
+        if (values.length !== 4 || values.some(value => !Number.isFinite(value))) return;
+        for (const [index, key] of ['x', 'y', 'width', 'height'].entries()) rectangle.setAttribute(key, values[index]);
+      }
+      coordinates.oninput = draw;
+      existing.onchange = () => {
+        const region = data.regions.find(value => value.id === existing.value);
+        if (!region) return;
+        artifacts.value = region.artifact_id; view.value = region.view_label; media.value = region.media_type;
+        coordinates.value = region.xywh.join(','); draw();
+      };
+      function point(event) {
+        const rect = image.getBoundingClientRect();
+        return {x:Math.round(Math.max(0, Math.min(data.canvas.width, (event.clientX - rect.left) / rect.width * data.canvas.width))),
+          y:Math.round(Math.max(0, Math.min(data.canvas.height, (event.clientY - rect.top) / rect.height * data.canvas.height)))};
+      }
+      svg.addEventListener('pointerdown', event => {
+        if (event.button !== 0) return;
+        event.preventDefault(); svg.setPointerCapture(event.pointerId);
+        const start = point(event);
+        const move = next => {
+          const end = point(next);
+          coordinates.value = [Math.min(start.x,end.x), Math.min(start.y,end.y), Math.abs(end.x-start.x), Math.abs(end.y-start.y)].join(',');
+          draw();
+        };
+        const finish = next => {
+          move(next); svg.releasePointerCapture(next.pointerId);
+          svg.removeEventListener('pointermove', move); svg.removeEventListener('pointerup', finish);
+          svg.removeEventListener('pointercancel', finish);
+        };
+        svg.addEventListener('pointermove', move); svg.addEventListener('pointerup', finish);
+        svg.addEventListener('pointercancel', finish);
+      });
+      async function save(status) {
+        const region = data.regions.find(value => value.id === existing.value);
+        controls.querySelectorAll('button').forEach(button => button.disabled = true);
+        try {
+          const result = await request('/api/artifact_regions', {method:'POST', headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({artifact_id:artifacts.value, canvas_id:fig.canvas_id,
+              xywh:coordinates.value.split(',').map(Number), view_label:view.value, media_type:media.value,
+              actor:actor.value, note:note.value, expected_image_hash:data.canvas.image_hash,
+              region_id:region?.id || null, expected_revision:region?.revision || 0, status})});
+          dialog.close(); dialog.remove(); $('figureModal').classList.remove('active');
+          await triggerActiveSearchOrIndex();
+          notice(result.export_errors.length ? '切片已保存，部分导出文件写入失败，请重试保存以同步导出。'
+            : status === 'rejected' ? '器物切片已撤回。' : '器物切片已保存，可从检索主图查看并加入比对。');
+        } catch (error) { feedback.textContent = error.message; }
+        finally { controls.querySelectorAll('button').forEach(button => button.disabled = false); }
+      }
+      const saveButton = document.createElement('button'); saveButton.textContent = '保存切片'; saveButton.onclick = () => save('approved');
+      const retract = document.createElement('button'); retract.textContent = '撤回当前切片';
+      retract.onclick = () => { if (existing.value) return save('rejected'); feedback.textContent = '请先选择已保存的切片。'; };
+      const close = document.createElement('button'); close.textContent = '关闭'; close.onclick = () => { dialog.close(); dialog.remove(); };
+      controls.append(saveButton, retract, close);
+      document.body.append(dialog); dialog.showModal();
+    }
+
+    async function openArtifactIdentity(artifactId, reviewer = {}) {
+      const detail = await request('/api/artifact_identity?id=' + encodeURIComponent(artifactId));
+      $('artifactIdentityDialog')?.remove();
+      const dialog = document.createElement('dialog');
+      dialog.id = 'artifactIdentityDialog';
+      dialog.style.cssText = 'width:760px;max-width:90vw;max-height:88vh;overflow:auto;padding:24px';
+      const heading = document.createElement('h3'); heading.textContent = '校订编号 · ' + detail.artifact_no;
+      const original = document.createElement('p'); original.textContent = '原书编号 ' + detail.original_artifact_no;
+      dialog.append(heading, original);
+      function field(label, value) {
+        const row = document.createElement('label');
+        row.style.cssText = 'display:flex;gap:12px;align-items:center;margin:12px 0';
+        const text = document.createElement('span'); text.textContent = label; text.style.width = '100px';
+        const input = document.createElement('input'); input.value = value || ''; input.style.flex = '1';
+        row.append(text, input); dialog.append(row); return input;
+      }
+      const number = field('校订编号', detail.artifact_no); number.maxLength = 128;
+      const scope = field('同号消歧标记', detail.disambiguation); scope.maxLength = 128;
+      const help = document.createElement('p'); help.className = 'muted';
+      help.textContent = '同号异物可填写不同的消歧标记。跨卷中属于同件器物的记录使用相同标记。';
+      dialog.append(help);
+      const actor = field('审校人', reviewer.actor || $('actor').value); actor.maxLength = 128;
+      const note = field('修改依据', reviewer.note); note.maxLength = 255;
+      const feedback = document.createElement('p'); dialog.append(feedback);
+      const controls = document.createElement('div'); controls.style.cssText = 'display:flex;gap:8px;margin:14px 0';
+      dialog.append(controls);
+      async function save(extra = {}) {
+        controls.querySelectorAll('button').forEach(button => button.disabled = true);
+        try {
+          const result = await request('/api/artifact_identity', {method:'POST',
+            headers:{'Content-Type':'application/json'}, body:JSON.stringify({artifact_id:artifactId,
+              expected_revision:detail.revision, actor:actor.value, note:note.value,
+              artifact_no:number.value, disambiguation:scope.value, ...extra})});
+          await triggerActiveSearchOrIndex();
+          dialog.close(); dialog.remove();
+          await openArtifactIdentity(artifactId, {actor:actor.value});
+          if (result.export_errors.length) notice('编号已保存，部分导出文件写入失败，请重试保存以同步导出。');
+        } catch (error) { feedback.textContent = error.message; }
+        finally { controls.querySelectorAll('button').forEach(button => button.disabled = false); }
+      }
+      const saveButton = document.createElement('button'); saveButton.textContent = '保存校订';
+      saveButton.className = 'primary'; saveButton.onclick = () => save(); controls.append(saveButton);
+      if (detail.history.length) {
+        const undo = document.createElement('button'); undo.textContent = '撤销最近一次修改';
+        undo.onclick = () => save({undo_revision_id:detail.history[0].id}); controls.append(undo);
+      }
+      const close = document.createElement('button'); close.textContent = '关闭';
+      close.onclick = () => { dialog.close(); dialog.remove(); }; controls.append(close);
+      for (const occurrence of detail.occurrences) {
+        const row = document.createElement('p');
+        const jump = document.createElement('button');
+        jump.textContent = '原页 ' + (occurrence.printed_page || occurrence.scan_index);
+        jump.onclick = () => { dialog.close(); jumpToPage(occurrence.manifest_id, occurrence.canvas_id,
+          occurrence.scan_index, occurrence.xywh, 'text'); };
+        row.append(jump, document.createTextNode(' ' + occurrence.snippet)); dialog.append(row);
+      }
+      for (const revision of detail.history) {
+        const row = document.createElement('p');
+        row.textContent = `版本 ${revision.revision} · ${revision.actor} · ${revision.created_at} · ${revision.reason}`;
+        dialog.append(row);
+      }
+      document.body.append(dialog); dialog.showModal();
+    }
+
+    async function openArtifactIssues(page = 1) {
+      try {
+        const data = await request('/api/artifact_issues?manifest=' + encodeURIComponent(activeIndexVol)
+          + '&q=' + encodeURIComponent($('globalQuery').value.trim()) + '&page=' + page);
+        $('artifactIssuesDialog')?.remove();
+        const dialog = document.createElement('dialog');
+        dialog.id = 'artifactIssuesDialog';
+        dialog.style.cssText = 'width:860px;max-width:90vw;max-height:85vh;overflow:auto;padding:24px';
+        const heading = document.createElement('h3'); heading.textContent = '编号关联待核查 · ' + data.total;
+        const explanation = document.createElement('p');
+        explanation.textContent = '以下同号记录存在器类、出土信息或属性候选冲突，需对照原页核查。';
+        const close = document.createElement('button'); close.textContent = '关闭';
+        close.onclick = () => { dialog.close(); dialog.remove(); };
+        dialog.append(heading, explanation, close);
+        for (const issue of data.items) {
+          const section = document.createElement('section'); section.style.cssText = 'border-top:1px solid #dce3de;padding:14px 0';
+          const title = document.createElement('strong'); title.textContent = issue.code + ' · ' + issue.source_namespace;
+          const conflicts = document.createElement('p');
+          const labels = {artifact_type:'器类',excavation_unit:'出土单位',stratum:'层位',typology:'型式'};
+          conflicts.textContent = Object.entries(issue.conflicts).map(([field, values]) =>
+            (labels[field] || field.replace('measurements.', '尺寸 ')) + ' ' + values.join('、')).join(' / ');
+          section.append(title, conflicts);
+          for (const record of issue.records) {
+            const button = document.createElement('button'); button.textContent = '核查与校订 · ' + record.short_title;
+            button.onclick = () => { dialog.close(); dialog.remove(); openArtifactIdentity(record.id).catch(error => notice(error.message)); };
+            section.append(button);
+          }
+          dialog.append(section);
+        }
+        const navigation = document.createElement('div'); navigation.style.cssText = 'display:flex;gap:12px;align-items:center';
+        const previous = document.createElement('button'); previous.textContent = '上一页'; previous.disabled = page === 1;
+        previous.onclick = () => openArtifactIssues(page - 1);
+        const next = document.createElement('button'); next.textContent = '下一页'; next.disabled = page * data.limit >= data.total;
+        next.onclick = () => openArtifactIssues(page + 1);
+        const counter = document.createElement('span'); counter.textContent = page + ' / ' + Math.max(1, Math.ceil(data.total / data.limit));
+        navigation.append(previous, counter, next); dialog.append(navigation);
+        document.body.append(dialog); dialog.showModal();
+      } catch (error) { notice(error.message); }
+    }
+    $('artifactIssuesBtn').onclick = () => openArtifactIssues();
+
     async function openArtifactAttributes(artifactId, reviewer = {}, candidateId = null) {
       const query = candidateId ? 'candidate=' + encodeURIComponent(candidateId) : 'id=' + encodeURIComponent(artifactId);
       const detail = await request('/api/artifact?' + query);
@@ -3294,6 +3785,7 @@
         parent.append(control); return control;
       }
       button('关闭', () => { dialog.close(); dialog.remove(); });
+      button('校订编号', async () => { dialog.close(); dialog.remove(); await openArtifactIdentity(detail.id); });
       if (!detail.candidates.length) {
         const empty = document.createElement('p'); empty.textContent = '暂无属性候选，请先运行器物属性补填。'; dialog.append(empty);
       }
@@ -3348,7 +3840,7 @@
       let dialog = document.createElement('dialog'); dialog.id = 'graphicDialog';
       dialog.style.cssText = 'width:92vw;max-width:1400px;height:88vh;padding:18px;overflow:auto';
       let heading = document.createElement('h3');
-      heading.textContent = (detail.label || '图表') + ' · ' + detail.title + (detail.published ? '' : '（试验候选，未发布）');
+      heading.textContent = (detail.title || detail.label || '图表') + (detail.published ? '' : '（试验候选，未发布）');
       dialog.append(heading);
       let controls = document.createElement('div'); controls.style.cssText='display:flex;gap:8px;flex-wrap:wrap'; dialog.append(controls);
       let stage = document.createElement('div'); stage.style.cssText='height:58vh;overflow:auto;margin:12px 0'; dialog.append(stage);
@@ -3356,7 +3848,7 @@
       let status = document.createElement('p'); dialog.append(status);
       function button(label, callback, parent=controls) {
         let b=document.createElement('button'); b.textContent=label;
-        b.onclick=async()=>{try{await callback();}catch(e){status.textContent=e.message;}};
+        b.onclick=async()=>{b.disabled=true;try{await callback();}catch(e){status.textContent=e.message;}finally{b.disabled=false;}};
         parent.append(b);return b;
       }
       async function source(anchor) {
@@ -3372,7 +3864,39 @@
         if(!detail.composite_url && images.length>1){let p=document.createElement('p');p.textContent='同一逻辑图表的多个原始片段；尚未进行图像配准拼接。';stage.prepend(p);}
       }
       button('整图／原始片段',wholeImages);
-      button('结构化表格',()=>{
+      if (detail.category === 'table') button('与正文核对', async () => {
+        const result = await request('/api/table_alignment?id=' + encodeURIComponent(id));
+        stage.replaceChildren();
+        const summary = document.createElement('p');
+        summary.textContent = `检测到 ${result.identifier_rows} 行器号，已核查 ${result.processed_rows} 行，尺寸差异 ${result.conflicts} 项，歧义关联 ${result.ambiguous_rows} 行。`;
+        stage.append(summary);
+        if (!result.identifier_rows) {
+          const empty = document.createElement('p'); empty.textContent = '本表未识别到可明确绑定的器号，可继续查看结构化表格和单元格原图。'; stage.append(empty);
+        }
+        for (const row of result.rows) {
+          const section = document.createElement('section'); section.style.cssText = 'border-top:1px solid #dde6e1;padding:12px 0';
+          const title = document.createElement('strong');
+          title.textContent = row.codes.join('、') + ' · ' + ({linked:'已找到器号记录',ambiguous:'关联有歧义',unmatched:'尚未找到器物档案'})[row.status];
+          const cells = document.createElement('p'); cells.textContent = row.cells.map(cell => cell.text).join(' | ');
+          section.append(title, cells);
+          for (const comparison of row.comparisons) {
+            const text = document.createElement('p');
+            text.textContent = comparison.field.replace('measurements.', '') + ' · '
+              + (comparison.status === 'conflict' ? '数值有差异' : '数值一致') + ' · 表格 '
+              + JSON.stringify(comparison.table.value) + ' / 正文 ' + JSON.stringify(comparison.body.value);
+            section.append(text);
+            for (const evidence of comparison.body.evidence) button('查看正文原文', async () => {
+              dialog.close(); dialog.remove();
+              await jumpToPage(evidence.manifest_id, evidence.canvas_id, evidence.scan_index, evidence.xywh, 'text');
+            }, section);
+          }
+          if (!row.comparisons.length) {
+            const message = document.createElement('p'); message.textContent = '当前证据尚不足以进行同字段尺寸比较。'; section.append(message);
+          }
+          stage.append(section);
+        }
+      });
+      function structuredTable(){
         if(detail.category!=='table'){status.textContent='此对象保留整图与文字标注，不反推统计数值。';return;}
         stage.replaceChildren();let frame=document.createElement('iframe');
         frame.style.cssText='width:100%;height:100%;border:1px solid #ccc';frame.sandbox='allow-same-origin';
@@ -3382,23 +3906,64 @@
             td.style.cursor='pointer';td.onclick=()=>{
               selectedCell=detail.cells.find(c=>c.id===td.dataset.cellId);edit.value=selectedCell.text;
               status.textContent='已选中单元格；原值：'+selectedCell.raw_text+'。可定位原页或填写依据后校对。';
-              for(let el of frame.contentDocument.querySelectorAll('td'))el.style.background='';td.style.background='#fff0b8';
+              for(let el of frame.contentDocument.querySelectorAll('[data-cell-id]'))el.style.background='';td.style.background='#fff0b8';
             };
           }
         };
         stage.append(frame);
+      }
+      button('按原书结构展示',structuredTable);
+      if(detail.table){
+        button('抽取的数据记录',()=>{
+          stage.replaceChildren();
+          const summary=document.createElement('p');
+          summary.textContent=`${detail.table.records.length} 条记录，${detail.table.column_count} 列，${detail.table.header_rows} 行表头。`;
+          stage.append(summary);
+          const table=document.createElement('table');table.style.cssText='border-collapse:collapse;width:100%;font-size:13px';
+          const head=table.createTHead().insertRow();
+          for(const column of detail.table.columns){const th=document.createElement('th');th.textContent=column.label;th.style.cssText='border:1px solid #bcc8bf;padding:8px;text-align:left';head.append(th);}
+          const body=table.createTBody();
+          for(const record of detail.table.records){
+            const row=body.insertRow();
+            for(const column of detail.table.columns){
+              const value=record.values[column.key],td=row.insertCell();td.textContent=value.text??'';
+              td.style.cssText='border:1px solid #bcc8bf;padding:8px;white-space:pre-wrap;vertical-align:top;cursor:pointer';
+              td.title=(value.inherited?'继承原书纵向合并单元格 · ':'')+value.parsed.type;
+              td.onclick=()=>{selectedCell=detail.cells.find(cell=>cell.id===value.cell_id);if(selectedCell){edit.value=selectedCell.text;status.textContent='已选中来源单元格，可查看原图或填写依据后校对。';}};
+            }
+          }
+          stage.append(table);
+          for(const issue of detail.table.issues.slice(0,24)){const message=document.createElement('p');message.textContent=issue.message;stage.append(message);}
+        });
+        button('本地 LLM 语义复核',async()=>{
+          status.textContent='正在复核表头、单位和数量符号的语义。';
+          const result=await request('/api/table_semantic_review',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({object_id:id,expected_revision:detail.revision})});
+          stage.replaceChildren();
+          const summary=document.createElement('p');summary.textContent=`${result.model} 已核对 ${result.sampled_cells}/${result.total_cells} 个单元格，返回 ${result.issues.length} 项待审建议。`;
+          if(result.discarded_issues?.length)summary.textContent+=`另有 ${result.discarded_issues.length} 项建议需要补充数量依据。`;stage.append(summary);
+          const labels={verify_header_rows:'核对表头行数',verify_unit_scope:'核对单位归属',interpret_as_count:'建议按数量理解',interpret_as_note:'建议按脚注理解',verify_type_code:'核对型式编号',leave_unresolved:'保留待核对'};
+          for(const issue of result.issues){const p=document.createElement('p');p.textContent=labels[issue.suggestion]+' · '+issue.quote;stage.append(p);
+            const cell=detail.cells.find(cell=>cell.id===issue.cell_id);if(cell?.anchors?.length)button('查看该单元格来源',()=>source(cell.anchors[0]),p);}
+          status.textContent='语义建议已返回，可结合原图审校。';
+        });
+      }
+      button('查看选中单元格原图',()=>{
+        if(!selectedCell)throw Error('请先点击表格单元格');
+        stage.replaceChildren();const image=document.createElement('img');image.src=selectedCell.crop_url;image.style.cssText='max-width:100%;max-height:100%;object-fit:contain';stage.append(image);
       });
       button('定位单元格原页',()=>{
         if(selectedCell?.anchors?.length)return source(selectedCell.anchors[0]);
         let p=detail.fragments[0];return source({canvas_id:p.canvas_id,scan_index:p.scan_index,polygon:p.polygon});
       });
-      for(let format of ['json','html','xlsx']){
-        let link=document.createElement('a');link.textContent='导出 '+format.toUpperCase();link.href='/api/graphic_export?id='+encodeURIComponent(id)+'&format='+format;
+      for(let format of (detail.category==='table'?['json','records','csv','html','xlsx']:['json','html','xlsx'])){
+        let link=document.createElement('a');link.textContent='导出 '+(format==='records'?'数据 JSON':format.toUpperCase());link.href='/api/graphic_export?id='+encodeURIComponent(id)+'&format='+format;
         link.target='_blank';controls.append(link);
       }
       let review=document.createElement('details');let summary=document.createElement('summary');summary.textContent='校对分类、单元格与跨页归组';review.append(summary);dialog.append(review);
-      function input(label){let l=document.createElement('label');l.textContent=label+' ';let field=document.createElement('input');l.append(field);review.append(l);return field;}
-      let actor=input('校对人'),note=input('原图依据'),edit=input('选中单元格的新值');
+      function input(label,multiline=false){let l=document.createElement('label');l.textContent=label+' ';let field=document.createElement(multiline?'textarea':'input');
+        if(multiline)field.style.cssText='width:100%;min-height:60px;vertical-align:top';l.append(field);review.append(l);return field;}
+      let actor=input('校对人'),note=input('原图依据'),edit=input('选中单元格的新值',true);
       let actions=document.createElement('div');actions.style.cssText='display:flex;gap:6px;flex-wrap:wrap;margin:10px 0';review.append(actions);
       async function apply(action,extra={}) {
         await request('/api/graphic_review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
@@ -3413,6 +3978,13 @@
       for(let g of await request('/api/graphics?manifest='+encodeURIComponent(detail.manifest_id)))if(g.id!==id && g.run_id===detail.run_id)targets.append(new Option((g.label||g.category)+' '+g.title,g.id));
       actions.append(targets);button('确认归组',()=>apply('group',{target_id:targets.value}),actions);
       let parts=document.createElement('select');for(let p of detail.fragments)parts.append(new Option('物理页 '+p.scan_index+' 的片段',p.id));actions.append(parts);
+      if(detail.table){
+        const headerLabel=document.createElement('label');headerLabel.textContent='表头行数 ';
+        const headerCount=document.createElement('input');headerCount.type='number';headerCount.min='0';headerCount.style.width='65px';headerCount.value=detail.fragments[0].table_header_rows;
+        headerLabel.append(headerCount);actions.append(headerLabel);
+        parts.addEventListener('change',()=>{headerCount.value=detail.fragments.find(part=>part.id===parts.value).table_header_rows;});
+        button('保存表头范围',()=>apply('set_header_rows',{target_id:parts.value,header_rows:Number(headerCount.value)}),actions);
+      }
       button('拆出选中片段',()=>apply('split',{target_id:parts.value}),actions);
       button('记录待连接单元格',()=>{if(!selectedCell)throw Error('请先选择单元格');if(!joins.includes(selectedCell.id))joins.push(selectedCell.id);status.textContent='已记录 '+joins.length+' 个来源单元格；只允许连接跨片段的同一列。';},actions);
       button('确认跨页单元格连接',()=>apply('join_cells',{cell_ids:joins}),actions);
@@ -3421,7 +3993,8 @@
           object_id:id,revision_id:detail.revisions[0].id,expected_revision:detail.revision,actor:actor.value,note:note.value})});
         dialog.close();dialog.remove();await openGraphic(id);
       },actions);}
-      button('关闭',()=>{dialog.close();dialog.remove();});document.body.append(dialog);dialog.showModal();wholeImages();
+      button('关闭',()=>{dialog.close();dialog.remove();});document.body.append(dialog);dialog.showModal();
+      if(detail.table){structuredTable();status.textContent=`已抽取 ${detail.table.records.length} 条记录，${detail.table.issues.length} 项结构或语义问题待核对。`;}else wholeImages();
     }
 
     async function showPage(index, xywh = null, type = 'text') {
@@ -3663,6 +4236,9 @@
       if (!currentModalFig) return;
       addToCompare(currentModalFig, true);
     };
+    $('modalCropBtn').onclick = () => {
+      if (currentModalFig) openRegionEditor(currentModalFig).catch(error => notice(error.message));
+    };
 
     // Review Action
     async function review(status) {
@@ -3706,6 +4282,7 @@
     $('reject').onclick = () => review('rejected');
 
     // Start
+    renderCompareDock();
     initApp().catch(e => notice('加载错误：' + e.message));
   </script>
 </body>

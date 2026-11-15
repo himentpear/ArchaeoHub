@@ -77,7 +77,7 @@ FIGURE_CAPTION_LINE_RE = re.compile(
 
 @dataclass
 class ExtractedLine:
-    """Single line of vector text reconstructed from PDF text matrix callbacks."""
+    """Text in PDF coordinates, with native-line or OCR-block source geometry."""
 
     text: str
     x_pt: float

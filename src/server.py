@@ -28,6 +28,8 @@ from src.db.models import (
 )
 from src.db.session import get_session, init_db
 from src.iiif.generator import IiifBuilder
+from src.artifact_identity import identity_state
+from src.source_types import SOURCE_LABELS, source_type
 
 
 _COLON_RE = re.compile(r"[∶︰：:]")
@@ -36,6 +38,15 @@ _NUM_CAPTION_RE = re.compile(r"^(\d+)[\.．、\s]\s*(.+)$")
 _SPECIMEN_EXTRACT_RE = re.compile(
     r"([A-Za-z0-9\u4e00-\u9fa5①-⑳Ⅰ-Ⅻ]+[∶︰：:][A-Za-z0-9\-～~—\.]+)"
 )
+
+
+class LibraryHTTPServer(ThreadingHTTPServer):
+    agent_runs = None
+
+    def server_close(self):
+        if self.agent_runs is not None:
+            self.agent_runs.close()
+        super().server_close()
 
 
 def _norm_text(text: str | None) -> str:
@@ -318,7 +329,7 @@ def _compute_plate_subfigures(
     return plate_title, sub_figs
 
 
-def _build_index_cache(engine, toc_source: str = "auto") -> dict:
+def _build_index_cache(engine, toc_source: str = "auto", region_roots=None) -> dict:
     """Build an in-memory multi-volume index of documents, TOC, figures, gallery tree, and cross-volume artifacts."""
     with get_session(engine) as session:
         doc_rows = session.execute(
@@ -353,6 +364,7 @@ def _build_index_cache(engine, toc_source: str = "auto") -> dict:
                 "domain": c.page_domain,
                 "width": c.width,
                 "height": c.height,
+                "revision": c.revision_no,
             }
 
         blocks_by_canvas: dict[str, list[tuple[int, int, int, int, str, str, str]]] = (
@@ -386,6 +398,7 @@ def _build_index_cache(engine, toc_source: str = "auto") -> dict:
         raw_figures = session.execute(
             select(PlateFigure).order_by(PlateFigure.canvas_id, PlateFigure.figure_number)
         ).all()
+        caption_block_ids = {pf.caption_block_id for (pf,) in raw_figures if pf.caption_block_id}
 
         figures = []
         sub_figures_flat = []
@@ -467,6 +480,8 @@ def _build_index_cache(engine, toc_source: str = "auto") -> dict:
                                 "scan_index": c_info["scan_index"],
                                 "printed_page": c_info["printed_page"],
                                 "role": "plate",
+                                "source_type": "caption",
+                                "media_type": "photo",
                                 "figure_number": f"{fig_num}（{sf['sub_index']}）",
                                 "snippet": sf["caption"],
                                 "xywh": sf["xywh"],
@@ -501,6 +516,8 @@ def _build_index_cache(engine, toc_source: str = "auto") -> dict:
                             "scan_index": c_info["scan_index"],
                             "printed_page": c_info["printed_page"],
                             "role": "drawing",
+                            "source_type": "caption",
+                            "media_type": "line_drawing",
                             "figure_number": fig_num or "插图",
                             "snippet": display_title,
                             "xywh": xywh,
@@ -783,7 +800,9 @@ def _build_index_cache(engine, toc_source: str = "auto") -> dict:
         attribute_records = {
             a.id: {
                 "id": a.id, "work_id": a.work_id,
+                **identity_state(a),
                 "artifact_type": a.artifact_type, "typology": a.typology,
+                "excavation_unit": a.excavation_unit, "stratum": a.stratum,
                 "material": a.material, "period": a.period,
                 "decoration": a.decoration, "measurements": a.measurements,
                 "review_status": a.review_status,
@@ -802,14 +821,21 @@ def _build_index_cache(engine, toc_source: str = "auto") -> dict:
                 ArtifactOccurrence.canvas_id,
                 ArtifactOccurrence.context_snippet,
                 ArtifactOccurrence.target_xywh,
+                ArtifactOccurrence.role,
+                ArtifactOccurrence.layout_block_id,
+                AltoBlock.block_type,
+                AltoBlock.content_text,
             ).join(Artifact, ArtifactOccurrence.artifact_id == Artifact.id)
+            .outerjoin(AltoBlock, ArtifactOccurrence.layout_block_id == AltoBlock.id)
         ).all()
 
         artifacts_by_code = {}
+        entries_by_artifact = {}
+        entries_by_source_code = defaultdict(list)
         unit_counter = Counter()
         unit_cross_counter = Counter()
 
-        for artifact_id, art_no, exc_unit, cid, snippet, t_xywh in occ_rows:
+        for artifact_id, raw_no, exc_unit, cid, snippet, t_xywh, occurrence_role, block_id, block_type, block_text in occ_rows:
             c_info = canvases_by_id.get(cid)
             if not c_info:
                 continue
@@ -817,6 +843,8 @@ def _build_index_cache(engine, toc_source: str = "auto") -> dict:
             if not m_info:
                 continue
 
+            identity = attribute_records[artifact_id]
+            art_no = identity["artifact_no"]
             norm_code = _norm_text(art_no).upper()
             disp_code = _COLON_RE.sub("∶", (art_no or "").strip())
             unit = (exc_unit or "").strip()
@@ -825,13 +853,14 @@ def _build_index_cache(engine, toc_source: str = "auto") -> dict:
             base_unit_m = re.match(r"^([A-Za-z]+\d+(?:扩)?(?:[A-Za-z]+\d+)?)", unit)
             base_unit = base_unit_m.group(1).upper() if base_unit_m else unit
 
-            scope_key = (m_info["namespace"],norm_code)
+            scope_key = (m_info["namespace"], norm_code, identity["disambiguation"])
             entry = artifacts_by_code.get(scope_key)
             if not entry:
                 entry = {
                     "code": disp_code,
                     "norm_code": norm_code,
                     "source_namespace": m_info["namespace"],
+                    "disambiguation": identity["disambiguation"],
                     "unit": base_unit,
                     "raw_unit": unit,
                     "vessel_name": "",
@@ -840,6 +869,10 @@ def _build_index_cache(engine, toc_source: str = "auto") -> dict:
                     "_seen_keys": set(),
                 }
                 artifacts_by_code[scope_key] = entry
+            entries_by_artifact[artifact_id] = entry
+            source_key = (m_info["namespace"], _norm_text(raw_no).upper())
+            if all(candidate is not entry for candidate in entries_by_source_code[source_key]):
+                entries_by_source_code[source_key].append(entry)
             if not any(record["id"] == artifact_id for record in entry["attribute_records"]):
                 entry["attribute_records"].append({
                     **attribute_records[artifact_id], "short_title": m_info["short_title"],
@@ -851,11 +884,10 @@ def _build_index_cache(engine, toc_source: str = "auto") -> dict:
             ):
                 entry["vessel_name"] = v_name
 
-            dedup_key = (c_info["manifest_id"], c_info["scan_index"], (snippet or "")[:40])
+            evidence_type = source_type(block_type, occurrence_role, caption_link=block_id in caption_block_ids, text=block_text)
+            dedup_key = (cid, snippet, evidence_type, t_xywh)
             if dedup_key not in entry["_seen_keys"]:
                 entry["_seen_keys"].add(dedup_key)
-                is_plate_vol = c_info["domain"] == "plate" or (
-                    m_info["namespace"] == "legacy-corpus" and m_info["title"].startswith(("3", "4", "5")))
                 entry["occurrences"].append(
                     {
                         "manifest_id": c_info["manifest_id"],
@@ -864,31 +896,45 @@ def _build_index_cache(engine, toc_source: str = "auto") -> dict:
                         "canvas_id": cid,
                         "scan_index": c_info["scan_index"],
                         "printed_page": c_info["printed_page"],
-                        "role": "plate" if is_plate_vol else "text",
+                        "role": "text",
+                        "artifact_id": artifact_id,
+                        "source_type": evidence_type,
+                        "source_label": SOURCE_LABELS[evidence_type],
+                        "media_type": None,
                         "snippet": (snippet or "").strip(),
                         "xywh": t_xywh,
                         "thumb_url": None,
                     }
                 )
 
-        for norm_code, fig_occs in specimen_fig_map.items():
-            entry = artifacts_by_code.get(norm_code)
-            if not entry:
-                continue
+        for entry in artifacts_by_code.values():
+            source_keys = {
+                (entry["source_namespace"], _norm_text(record["original_artifact_no"]).upper())
+                for record in entry["attribute_records"]
+            }
+            fig_occs = []
+            for key in source_keys:
+                candidates = entries_by_source_code[key]
+                for occurrence in specimen_fig_map.get(key, []):
+                    supported = [candidate for candidate in candidates if any(
+                        o["canvas_id"] == occurrence["canvas_id"] for o in candidate["occurrences"]
+                    )]
+                    if any(candidate is entry for candidate in supported) or len(candidates) == 1:
+                        fig_occs.append(occurrence)
             for f_occ in fig_occs:
                 v_name = _extract_vessel_name(f_occ.get("snippet") or "")
                 if v_name and not entry["vessel_name"]:
                     entry["vessel_name"] = v_name
                 matched_existing = False
                 for occ in entry["occurrences"]:
-                    if (occ["canvas_id"] == f_occ["canvas_id"]
+                    if (occ["canvas_id"] == f_occ["canvas_id"] and occ["source_type"] == "caption"
                             and (f_occ["role"] != "plate" or
                                  occ["snippet"].strip() == f_occ["snippet"].strip())):
                         occ["thumb_url"] = f_occ["thumb_url"]
                         occ["figure_number"] = f_occ["figure_number"]
-                        if f_occ["role"] == "plate":
-                            occ["xywh"] = f_occ["xywh"]
-                            occ["role"] = "plate"
+                        occ["image_xywh"] = f_occ["xywh"]
+                        occ["role"] = f_occ["role"]
+                        occ["media_type"] = f_occ["media_type"]
                         matched_existing = True
                         break
                 if not matched_existing:
@@ -901,16 +947,43 @@ def _build_index_cache(engine, toc_source: str = "auto") -> dict:
                             "scan_index": f_occ["scan_index"],
                             "printed_page": f_occ["printed_page"],
                             "role": f_occ["role"],
+                            "source_type": "caption",
+                            "source_label": SOURCE_LABELS["caption"],
+                            "media_type": f_occ["media_type"],
                             "figure_number": f_occ["figure_number"],
                             "snippet": f_occ["snippet"],
                             "xywh": f_occ["xywh"],
+                            "image_xywh": f_occ["xywh"],
                             "thumb_url": f_occ["thumb_url"],
                         }
                     )
 
+        from src.region_models import ArtifactImageRegion
+        from src.artifact_regions import region_current
+        for region in session.scalars(select(ArtifactImageRegion).where(ArtifactImageRegion.status == "approved")):
+            entry = entries_by_artifact.get(region.artifact_id)
+            canvas = session.get(Canvas, region.canvas_id)
+            if entry is None or canvas is None or not region_roots or not region_current(region, canvas, region_roots):
+                continue
+            meta = manifest_meta[canvas.manifest_id]
+            xywh = ",".join(map(str, region.xywh))
+            entry["occurrences"].append({
+                "artifact_id": region.artifact_id, "manifest_id": canvas.manifest_id,
+                "work_title": meta["title"], "short_title": meta["short_title"],
+                "canvas_id": canvas.id, "scan_index": canvas.scan_index, "printed_page": canvas.printed_page_label,
+                "role": "drawing" if region.media_type == "line_drawing" else "plate",
+                "source_type": "image", "source_label": SOURCE_LABELS["image"],
+                "media_type": region.media_type, "figure_number": region.view_label or "已校订切片",
+                "snippet": region.view_label, "xywh": xywh, "image_xywh": xywh,
+                "thumb_url": "/api/artifact_region_image?id=" + region.id,
+                "is_precise_crop": True, "region_id": region.id,
+            })
+
         cross_artifacts = []
         for norm_code, entry in artifacts_by_code.items():
             del entry["_seen_keys"]
+            for occurrence in entry["occurrences"]:
+                occurrence["page_revision"] = canvases_by_id[occurrence["canvas_id"]]["revision"]
             entry["occurrences"].sort(
                 key=lambda o: (o["work_title"], o["scan_index"])
             )
@@ -927,7 +1000,7 @@ def _build_index_cache(engine, toc_source: str = "auto") -> dict:
             snippets_joined = " ".join(o["snippet"] for o in entry["occurrences"])
             attributes_joined = json.dumps(entry["attribute_records"], ensure_ascii=False)
             entry["_norm"] = _norm_text(
-                f"{entry['code']} {entry['unit']} {entry['vessel_name']} {' '.join(vols)} {snippets_joined} {attributes_joined}"
+                f"{entry['code']} {entry['disambiguation']} {entry['unit']} {entry['vessel_name']} {' '.join(vols)} {snippets_joined} {attributes_joined}"
             )
             cross_artifacts.append(entry)
 
@@ -1004,17 +1077,40 @@ def make_server(library: Path, host: str = "127.0.0.1", port: int = 8000, source
             token = tuple(session.execute(select(
                 TocStructureRun.id, TocStructureRun.status
             ).order_by(TocStructureRun.id)).all())
+            from src.graphics.models import GraphicRun
+            token += tuple((run.id,run.published,run.metrics.get('pages'),run.metrics.get('regions'))
+                for run in session.scalars(select(GraphicRun).order_by(GraphicRun.id)))
         with cache_lock:
             if token != index_cache_token:
                 index_cache.clear()
                 index_cache_token = token
             if toc_source not in index_cache:
-                index_cache[toc_source] = _build_index_cache(engine, toc_source=toc_source)
+                region_roots = [library] + ([source_library] if source_library else [])
+                index_cache[toc_source] = _build_index_cache(engine, toc_source=toc_source, region_roots=region_roots)
             return index_cache[toc_source]
 
     def invalidate_index():
         with cache_lock:
             index_cache.clear()
+
+    def export_artifact_work(artifact_id):
+        from src.artifact_attributes import export_attributes
+        with get_session(engine) as session:
+            artifact = session.get(Artifact, artifact_id)
+            exports = [(m.id, m.work.slug) for m in session.scalars(
+                select(Manifest).where(Manifest.work_id == artifact.work_id)
+            )]
+        errors = []
+        for manifest_id, slug in exports:
+            try:
+                with get_session(engine) as session:
+                    export_attributes(session, manifest_id, library / slug)
+            except (OSError, ValueError):
+                errors.append(manifest_id)
+        return errors
+
+    from src.agent_service import AgentRuns
+    agent_runs = AgentRuns(library / "agent_runs")
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -1051,6 +1147,48 @@ def make_server(library: Path, host: str = "127.0.0.1", port: int = 8000, source
                 )
             if path == "/health":
                 return self.send({"status": "ok", "database": engine.dialect.name})
+            if path == "/api/agent_run":
+                return self.send(agent_runs.get(query.get("id", [""])[0]))
+            if path == "/api/table_jobs":
+                from src.table_jobs import list_table_jobs
+                return self.send(list_table_jobs(library,query.get('manifest',[None])[0]))
+            if path == "/api/table_inventory":
+                job_id=query.get('job',[''])[0]
+                if not re.fullmatch(r'[a-f0-9]{20}',job_id):raise ValueError('Invalid table job identifier')
+                inventory=library/'table-jobs'/f'{job_id}-inventory.json'
+                if not inventory.is_file():raise LookupError('Table inventory not found')
+                return self.send(inventory.read_bytes())
+            if path == "/api/table_semantic_result":
+                from src.graphics.service import object_detail
+                with get_session(engine) as session:detail=object_detail(session,query.get('id',[''])[0])
+                result=library/'table-semantic-results'/detail['id']/f"{detail['revision']}.json"
+                if not result.is_file():return self.send({'status':'pending','revision':detail['revision']})
+                return self.send(result.read_bytes())
+            if path in {"/api/artifact_regions", "/api/artifact_region_image"}:
+                from src.artifact_regions import list_regions, render_region, image_path
+                roots = [library] + ([source_library] if source_library else [])
+                with get_session(engine) as session:
+                    if path == "/api/artifact_region_image":
+                        return self.send(render_region(session, query.get("id", [""])[0], roots), mime="image/jpeg")
+                    canvas_id = query.get("canvas", [""])[0]
+                    artifact_id = query.get("artifact", [""])[0]
+                    if not canvas_id and not artifact_id:
+                        raise ValueError("Select a page or artifact")
+                    data = {"regions": list_regions(session, artifact_id=artifact_id, canvas_id=canvas_id), "artifacts": []}
+                    if canvas_id:
+                        canvas = session.get(Canvas, canvas_id)
+                        if canvas is None:
+                            raise LookupError()
+                        data["canvas"] = {"id": canvas.id, "manifest_id": canvas.manifest_id,
+                            "width": canvas.width, "height": canvas.height, "scan_index": canvas.scan_index,
+                            "image_url": f"/iiif/image/{canvas.manifest_id}/{canvas.scan_index}/full/max/0/default.jpg"}
+                        from src.ingest.page_pipeline import file_hash
+                        data["canvas"]["image_hash"] = file_hash(image_path(canvas, roots))
+                        data["artifacts"] = [{"id": a.id, **identity_state(a)} for a in session.scalars(
+                            select(Artifact).join(ArtifactOccurrence, ArtifactOccurrence.artifact_id == Artifact.id)
+                            .where(ArtifactOccurrence.canvas_id == canvas_id)
+                        ).unique()]
+                    return self.send(data)
             if path == "/api/toc_structure":
                 from src.toc_structure import toc_view
                 source = query.get("source", ["auto"])[0]
@@ -1075,8 +1213,26 @@ def make_server(library: Path, host: str = "127.0.0.1", port: int = 8000, source
                         artifact_id = candidate.artifact_id
                     return self.send(artifact_detail(session, artifact_id))
 
+            if path == "/api/artifact_identity":
+                from src.artifact_identity import identity_detail
+                with get_session(engine) as session:
+                    return self.send(identity_detail(session, query.get("id", [""])[0]))
+            if path == "/api/table_alignment":
+                from src.table_alignment import align_table
+                with get_session(engine) as session:
+                    return self.send(align_table(session, query.get("id", [""])[0],
+                                                limit=int(query.get("limit", ["200"])[0]),
+                                                offset=int(query.get("offset", ["0"])[0])))
+            if path == "/api/artifact_issues":
+                from src.artifact_identity import find_identity_issues
+                return self.send(find_identity_issues(
+                    get_index(), _norm_text(query.get("q", [""])[0]),
+                    query.get("manifest", ["all"])[0],
+                    page=int(query.get("page", ["1"])[0]), limit=int(query.get("limit", ["50"])[0]),
+                ))
+
             if path in {"/api/graphics","/api/graphic_asset","/api/graphic_export"}:
-                from src.graphics.service import object_detail,asset_path,render_html,render_xlsx
+                from src.graphics.service import object_detail,asset_path,render_html,render_xlsx,render_csv
                 with get_session(engine) as session:
                     if path=='/api/graphics' and query.get('manifest'):
                         from src.graphics.models import GraphicObject
@@ -1090,9 +1246,11 @@ def make_server(library: Path, host: str = "127.0.0.1", port: int = 8000, source
                     if path=="/api/graphics":return self.send(detail)
                     format=query.get('format',['json'])[0]
                     if format=='json':return self.send(detail)
+                    if format=='records':return self.send(detail.get('table',{}))
+                    if format=='csv':return self.send(render_csv(detail),mime='text/csv; charset=utf-8')
                     if format=='html':return self.send(render_html(detail),mime='text/html; charset=utf-8')
                     if format=='xlsx':return self.send(render_xlsx(detail),mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-                    raise ValueError('Supported graphic exports: json, html, xlsx')
+                    raise ValueError('Supported graphic exports: json, records, csv, html, xlsx')
 
             toc_source = query.get("source", ["auto"])[0] if path == "/api/toc" else "auto"
             if toc_source not in {"auto", "rules", "local_model"}:
@@ -1266,8 +1424,17 @@ def make_server(library: Path, host: str = "127.0.0.1", port: int = 8000, source
                     tokens = _norm_tokens(q_str)
 
                     matched_artifacts = []
+                    exact_code = query.get("exact_code", ["0"])[0] in {"1", "true"}
+                    namespace = query.get("namespace", [""])[0]
+                    artifact_id = query.get("artifact", [""])[0]
                     vol_art_counts = Counter()
                     for art in idx["cross_artifacts"]:
+                        if namespace and art["source_namespace"] != namespace:
+                            continue
+                        if artifact_id and not any(record["id"] == artifact_id for record in art["attribute_records"]):
+                            continue
+                        if exact_code and _norm_text(art["code"]) != _norm_text(q_str):
+                            continue
                         if cross_only and art["volume_count"] < 2:
                             continue
                         if unit_filter and art["unit"] != unit_filter:
@@ -1354,10 +1521,11 @@ def make_server(library: Path, host: str = "127.0.0.1", port: int = 8000, source
                         )
                     )
                     stmt = (
-                        select(AltoLine, Canvas, Manifest, Work)
+                        select(AltoLine, Canvas, Manifest, Work, AltoBlock.block_type, AltoBlock.content_text)
                         .join(Canvas, AltoLine.canvas_id == Canvas.id)
                         .join(Manifest, Canvas.manifest_id == Manifest.id)
                         .join(Work, Manifest.work_id == Work.id)
+                        .outerjoin(AltoBlock, AltoLine.block_id == AltoBlock.id)
                     )
                     for tok in tokens:
                         stmt = stmt.where(norm_col.contains(tok))
@@ -1368,9 +1536,13 @@ def make_server(library: Path, host: str = "127.0.0.1", port: int = 8000, source
                     )
 
                     all_rows = session.execute(stmt).all()
+                    caption_blocks = set(session.scalars(select(PlateFigure.caption_block_id).where(
+                        PlateFigure.caption_block_id.is_not(None)
+                    )))
                     vol_counts = Counter()
                     hits = []
-                    for line, canvas, manifest, work in all_rows:
+                    for line, canvas, manifest, work, block_type, block_text in all_rows:
+                        evidence_type = source_type(block_type, caption_link=line.block_id in caption_blocks, text=block_text)
                         vol_counts[manifest.id] += 1
                         if len(hits) < 400:
                             c_uri = f"{base_url}/manifest/{manifest.id}/canvas/{canvas.id}"
@@ -1386,6 +1558,8 @@ def make_server(library: Path, host: str = "127.0.0.1", port: int = 8000, source
                                     "scan_index": canvas.scan_index,
                                     "printed_page": canvas.printed_page_label,
                                     "page_domain": canvas.page_domain,
+                                    "source_type": evidence_type,
+                                    "source_label": SOURCE_LABELS[evidence_type],
                                     "target": f"{c_uri}#xywh={line.xywh}",
                                     "xywh": line.xywh,
                                     "body": {
@@ -1459,7 +1633,8 @@ def make_server(library: Path, host: str = "127.0.0.1", port: int = 8000, source
                                 )
 
                     img_path = Path(canvas.image_storage_path).resolve()
-                    if not img_path.is_relative_to(library) or not img_path.exists():
+                    allowed_roots = [library] + ([Path(source_library).resolve()] if source_library else [])
+                    if not any(img_path.is_relative_to(root) for root in allowed_roots) or not img_path.is_file():
                         raise LookupError()
                     from PIL import Image
 
@@ -1605,7 +1780,7 @@ def make_server(library: Path, host: str = "127.0.0.1", port: int = 8000, source
 
         def do_POST(self):
             post_path=urlparse(self.path).path
-            if post_path not in {"/api/review","/api/graphic_review"}:
+            if post_path not in {"/api/review", "/api/graphic_review", "/api/table_semantic_review", "/api/artifact_identity", "/api/artifact_regions", "/api/agent_check"}:
                 return self.send({"error": "Not found"}, 404)
             origin = self.headers.get("Origin")
             if origin and origin != base_url.removesuffix("/iiif"):
@@ -1617,6 +1792,49 @@ def make_server(library: Path, host: str = "127.0.0.1", port: int = 8000, source
                 if not 0 < length <= 100000:
                     raise ValueError("Invalid body length")
                 body = json.loads(self.rfile.read(length))
+                if not isinstance(body, dict):
+                    raise ValueError("JSON object required")
+                if post_path=='/api/table_semantic_review':
+                    from src.graphics.service import object_detail
+                    from src.graphics.refinement import review_table_semantics_all
+                    from src.model_router import ModelRouter
+                    from src.settings import load_settings
+                    with get_session(engine) as session:
+                        detail=object_detail(session,body.get('object_id'))
+                    if detail['category']!='table':raise ValueError('A table object is required')
+                    if body.get('expected_revision')!=detail['revision']:raise ValueError('Graphic revision conflict')
+                    router=ModelRouter.from_settings(library/'table-semantic-cache',load_settings())
+                    if router.local_endpoint is None:raise ValueError('Configure LOCAL_LLM_BASE_URL and LOCAL_LLM_MODEL')
+                    try:
+                        result=review_table_semantics_all(detail,router.local_endpoint,library/'table-semantic-cache')
+                    except TimeoutError:
+                        return self.send({'error':'本地 LLM 语义复核超时，可稍后重试。'},504)
+                    except RuntimeError:
+                        return self.send({'error':'本地 LLM 服务暂时不可用，请检查模型服务。'},503)
+                    with get_session(engine) as session:
+                        current=object_detail(session,detail['id'])
+                    if current['revision']!=detail['revision']:raise ValueError('Graphic changed during semantic review')
+                    return self.send(result)
+                if post_path == "/api/agent_check":
+                    return self.send(agent_runs.start(body.get("query"), base_url.removesuffix("/iiif"),
+                                                      body.get("namespace", ""), body.get("artifact_id", "")), status=202)
+                if post_path == "/api/artifact_regions":
+                    from src.artifact_regions import save_region
+                    roots = [library] + ([source_library] if source_library else [])
+                    with cache_lock:
+                        with get_session(engine) as session:
+                            result = save_region(session, roots, **body)
+                        index_cache.clear()
+                        result["export_errors"] = export_artifact_work(body["artifact_id"])
+                    return self.send(result)
+                if post_path == "/api/artifact_identity":
+                    from src.artifact_identity import edit_identity
+                    with cache_lock:
+                        with get_session(engine) as session:
+                            result = edit_identity(session, **body)
+                        index_cache.clear()
+                        result["export_errors"] = export_artifact_work(body["artifact_id"])
+                    return self.send(result)
                 if post_path=="/api/graphic_review":
                     from src.graphics.service import review_graphic,undo_review
                     with get_session(engine) as session:
@@ -1646,7 +1864,8 @@ def make_server(library: Path, host: str = "127.0.0.1", port: int = 8000, source
             except Exception:
                 self.send({"error": "Review failed"}, 500)
 
-    server = ThreadingHTTPServer((host, port), Handler)
+    server = LibraryHTTPServer((host, port), Handler)
     base_url = f"http://127.0.0.1:{server.server_address[1]}/iiif"
     server.engine = engine
+    server.agent_runs = agent_runs
     return server

@@ -127,6 +127,7 @@ def init_db(db_url: str = DEFAULT_DB_URL, echo: bool = False) -> Engine:
     """Initialize all database tables, indexes, and SQLite FTS5 virtual tables."""
     from src.graphics import models as _graphic_models  # register additive tables
     from src import toc_models as _toc_models
+    from src import region_models as _region_models
     engine = create_db_engine(db_url=db_url, echo=echo)
     Base.metadata.create_all(engine)
     # SQLite checks referencing rows on every cascading deletion. Without these

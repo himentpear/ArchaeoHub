@@ -8,6 +8,13 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from src.pipeline import run_document
 
 
+def graphics_stage_path(library, manifest_id, explicit):
+    if explicit is not None:return explicit
+    from src.graphics.pipeline import source_guard
+    revision=source_guard((library/'library.db').resolve(),manifest_id)
+    return library/'graphics-stage'/manifest_id/revision[:16]
+
+
 def main():
     if hasattr(sys.stdout,"reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -25,8 +32,10 @@ def main():
     parser.add_argument('--skip-graphics',action='store_true',help='Explicit legacy text-only path; no graphic structure is inferred')
     parser.add_argument('--graphics-runtime',type=Path,help='Isolated Python 3.11 worker executable')
     parser.add_argument('--graphics-output',type=Path,help='Separate staging library for graph objects')
+    parser.add_argument('--stage-graphics-only',action='store_true',help='Keep graphic output in its staging library')
     args=parser.parse_args()
     options=vars(args).copy();skip=options.pop('skip_graphics');runtime=options.pop('graphics_runtime');graphics_output=options.pop('graphics_output')
+    stage_only=options.pop('stage_graphics_only')
     if not skip:
         import sqlite3
         from src.graphics.front import prepare_pdf
@@ -39,14 +48,17 @@ def main():
             connection=sqlite3.connect(database.resolve().as_uri()+'?mode=ro',uri=True)
             existing=connection.execute('select id,total_pages from manifests where source_pdf_sha256=?',(file_hash(args.pdf),)).fetchone();connection.close()
         if existing:
-            result=run_graphics(args.output,existing[0],graphics_output or args.output/'graphics-stage',
-                list(range(1,min(existing[1],args.max_pages or existing[1])+1)),runtime=runtime)
+            result=run_graphics(args.output,existing[0],graphics_stage_path(args.output,existing[0],graphics_output),
+                list(range(1,min(existing[1],args.max_pages or existing[1])+1)),runtime=runtime,
+                settings_path=args.settings_path,with_vl=False,deploy_to=None if stage_only else args.output)
             print(json.dumps(result,ensure_ascii=False,indent=2));return
-        options['graphics_front_dir']=prepare_pdf(args.pdf,args.output,max_pages=args.max_pages,dpi=args.dpi,runtime=runtime)
+        options['graphics_front_dir']=prepare_pdf(args.pdf,args.output,max_pages=args.max_pages,dpi=args.dpi,runtime=runtime,settings_path=args.settings_path)
     result=run_document(**options)
     if not skip and result['status']=='completed':
-        result['graphics']=run_graphics(args.output,result['stats']['manifest_id'],graphics_output or args.output/'graphics-stage',
-            list(range(1,result['stats']['pages_ingested']+1)),runtime=runtime)
+        manifest_id=result['stats']['manifest_id']
+        result['graphics']=run_graphics(args.output,manifest_id,graphics_stage_path(args.output,manifest_id,graphics_output),
+            list(range(1,result['stats']['pages_ingested']+1)),runtime=runtime,
+            settings_path=args.settings_path,with_vl=False,deploy_to=None if stage_only else args.output)
     print(json.dumps(result,ensure_ascii=False,indent=2))
 
 

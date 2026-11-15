@@ -1,6 +1,6 @@
 # 图表处理与验收
 
-本阶段使用独立 Python 3.11 CPU 工作进程，默认 4 线程。版面检测先于图表文字识别；原始 OCR、已确认脚注、Work 和 Canvas 不重建。输出默认进入克隆的暂存库，只有独立标注验收通过后才能发布。当前仍为候选功能，不能把模型候选当作验收真值。
+图表使用独立 Python 3.11 CPU 工作进程，默认 4 线程。版面检测先于图表文字识别。正式部署按全量来源哈希、裁片、坐标和数据完整性检查增量发布候选结果，结构与语义疑点进入审校队列。原页、单元格与修订版本提供回溯依据。
 
 ## 安装与模型
 
@@ -15,7 +15,7 @@ data/processed/models/graphics-runtime/Scripts/python.exe scripts/bootstrap_grap
 
 阅读服务继续使用原来的 `.venv`；在该环境更新 `requirements.txt`。模型缓存和环境均在被 Git 忽略的 `data/processed/models/`。Windows 不要在工作进程运行时替换 OpenCV DLL。
 
-默认模型：PP-DocLayout_plus-L、PP-LCNet_x1_0_doc_ori、SLANet_plus；复杂表格追加 SLANeXt 和 RT-DETR 单元格检测，文字使用 RapidOCR。PP-DocLayout-S 只用于抽样对照。PaddleOCR-VL-1.6-0.9B 仅作限时的小裁片第二候选，不自动覆盖结果。复杂模型分歧进入审校。
+版面、方向和结构模型使用 PP-DocLayoutV3、PP-LCNet_x1_0_doc_ori、SLANet_plus。网格候选追加 PP-DocLayout_plus-L 交叉判断。复杂表格追加 SLANeXt 和 RT-DETR 单元格检测。文字和表格 HTML 通过独立 OCR API 调用 `PaddleOCRVL(pipeline_version="v1.6")`，保存原生 JSON、Markdown 和图片。PP-DocLayout-S 用于抽样对照。模型分歧进入审校。
 
 `weights-lock.json` 记录下载文件的本地 SHA256；这是本地复现锁，不是上游签名校验。缓存还绑定原图哈希、配置和代码版本。更新权重后重新生成锁。报告中的 `graphics_models_manifest.json` 不包含本机绝对路径。
 
@@ -24,10 +24,35 @@ data/processed/models/graphics-runtime/Scripts/python.exe scripts/bootstrap_grap
 新文献默认先检测版面，再做来源 OCR 和结构化处理：
 
 ```powershell
-.venv/Scripts/python.exe scripts/process_document.py PATH_TO_PDF --max-pages 5 --skip-models --graphics-output data/processed/benchmarks/new-graphics
+.venv/Scripts/python.exe scripts/process_document.py PATH_TO_PDF --skip-models
 ```
 
-`--skip-models` 跳过原有语言模型富化；`--skip-graphics` 才会显式跳过新版图表阶段。图表阶段失败会报错，不静默退回不带结构的结果。已有文献走增量处理，不调用 `--rebuild-index`。
+新报告默认按文献和来源修订创建独立图表暂存目录，并启动持续部署进程。完成页通过来源校验后写入正式库，异常重识别具有重试次数记录。`--stage-graphics-only` 可保留暂存输出，`--skip-models` 控制原有语言模型富化阶段，`--skip-graphics` 控制图表阶段。
+
+## 全量任务与正式部署
+
+已有全量表格任务可独立接入持续入库进程。
+
+```powershell
+.venv/Scripts/python.exe scripts/deploy_table_batch.py --staging data/processed/benchmarks/tables-reprocessed-20261115 --library data/processed/library --watch
+.venv/Scripts/python.exe scripts/review_table_jobs.py --library data/processed/library --watch
+```
+
+正式阅览器的“表格任务”入口展示页数、记录数、失败状态与自动语义复核进度，每15秒更新。相关接口为 `GET /api/table_jobs`、`GET /api/table_inventory?job=ID` 和 `GET /api/table_semantic_result?id=ID`。
+
+任务状态保存在正式库的 `table-jobs/`。每个来源配置对应稳定的入库批次，追加页面时保留已有单元格及校订。任务去重依靠文件锁，完成页缓存支持断点续跑，识别进程恢复次数写入任务状态。正式库首次写入前生成数据库快照，裁片按哈希复制并核验。
+
+各表的 JSON、CSV、HTML、Excel 与正文核对结果位于 `exports/tables/批次ID/图表ID/`。自动规则核对检查结构问题、表头范围、单位、未读出格及明确器号的正文关联，带来源的疑点写入审校任务。
+
+语义复核使用 `LOCAL_LLM_*` 配置的 OpenAI 兼容端点。工作进程检查所有触发复核条件的表格，覆盖对应表头、脚注、数量字段与疑点单元格，按80格分批传输。每项建议通过原文引用和 JSON Schema 校验，并绑定表格修订版本。结果保存在 `table-semantic-results/`，处理状态写入任务页面。
+
+批次回滚可执行以下命令。
+
+```powershell
+.venv/Scripts/python.exe scripts/deploy_table_batch.py --staging data/processed/benchmarks/tables-reprocessed-20261115 --library data/processed/library --rollback
+```
+
+回滚先暂停该批次的持续入库，再备份并停用对应图表发布版本。版本化数据和裁片支持回溯。
 
 观台重点页抽样：
 
@@ -47,16 +72,45 @@ data/processed/models/graphics-runtime/Scripts/python.exe scripts/bootstrap_grap
 ## API 和数据
 
 - `GET /api/graphics?manifest=ID`：图表候选列表。
-- `GET /api/graphics?id=ID`：片段、单元格、来源锚点和审校历史。
+- `GET /api/graphics?id=ID` 返回片段、单元格、来源锚点、审校历史和 `table` 数据记录。
 - `GET /api/graphic_asset?fragment=ID` 或 `cell=ID` 或 `object=ID`：原裁片或配准图。
-- `GET /api/graphic_export?id=ID&format=json|html|xlsx`：导出。Excel 的 Sources 表保留原始定位，结构重叠另记 StructureIssues，避免丢弃来源。
-- `POST /api/graphic_review`：`object_id, expected_revision, actor, note, action`；支持 `correct_cell/classify/approve/reject/group/split/join_cells`。撤销使用 `undo=true, revision_id`。
+- `GET /api/graphic_export?id=ID&format=json|records|csv|html|xlsx` 提供导出。`records` 返回逻辑数据表。CSV 保留来源页和单元格编号。Excel 包含 Table、Records、Columns、Sources、StructureIssues。
+- `POST /api/graphic_review` 使用 `object_id, expected_revision, actor, note, action`，支持 `correct_cell/classify/approve/reject/group/split/join_cells/set_header_rows`。`set_header_rows` 同时提供片段 `target_id` 和整数 `header_rows`，0 表示无表头。撤销使用 `undo=true, revision_id`。
+- `POST /api/table_semantic_review` 使用 `object_id, expected_revision`，按需调用 `LOCAL_LLM_*` 配置的 OpenAI 兼容端点，返回带来源引用的待审建议。
+
+## 表格版式与数据抽取
+
+表格按测得的物理列宽、多级表头、横向合并和纵向分组展示。`<br>` 和单元格内的换行保留。逻辑记录沿明确的 rowspan 继承分组值，并记录 `inherited` 和原单元格编号。每个字段保留有效文字、原始 OCR、解析类型、单位候选和来源锚点。人工改字或调整表头后，字段路径和数据导出即时重新派生，操作纳入版本检查和撤销。
+
+新报告通过 `prepare_pdf` 自动进入该流程。PP-DocLayoutV3 提供主版面判断，网格补充区域由另一版面模型交叉判断，并结合图表标题选择处理分支。模型共同指向图件的方格区域归入图件。分类有分歧的区域会自动调用 PaddleOCR-VL 的原生版面解析流程确认类型。仍有分歧时保存裁片和分类证据，并生成页面审校任务。后续扫描可直接执行常规文献入库命令，表格页由流程自动选择。
+
+超过 160 个物理单元格的大表，优先在完整行边界分段识别，分段边界避开纵向合并单元格。结果恢复全局行号和原图坐标，保留各段的原生 OCR 输出。识别行数与网格不一致时记入问题列表。表内 `tfoot` 和跨列注释单独导出为 `notes`，展示保留原位置。
+
+稀疏符号矩阵按原图网格逐格读取。PaddleOCR-VL 识别表头和有文字的单元格，清晰孤立的三角符号按轮廓记录为带来源定位的观察候选，空白保留独立状态。该分支保留 `source-observations.json` 和每个文字裁片的 OCR 结果。单元格有墨迹却未读出文字时记为 `unreadable`。行列数一致而合并关系有分歧的普通表格，保留已测得的单元格边界，并将由网格轴线推定的边界标记为 `grid_axes`。
+
+斜线表头的左上角区域可结合相邻单元格、四边原图线条和对角线恢复为一个表头区域，边界标记为 `grid_axes`。短续表也参与稀疏符号矩阵判断，表头缺角时结合相邻层级确定表头范围。
+
+表头识别发生列数分歧时，只有一整行的单元格数量和跨度序列一致，才按阅读顺序对应到物理单元格，其余表头从原图单元格裁片重新识别。对应方式保存在单元格的 `method` 中。
+
+OCR API 另提供 `task="spotting"`，返回原生文字定位的行级坐标。调用时可通过 `max_tokens` 设置本次请求的生成上限。第 538 页左侧 356×1400 像素裁片的本机试验返回 17 个文字定位，耗时 442.58 秒，罗马类型号出现漏读。该接口作为可选能力保留。常规批量流程采用网格定位、单元格文字识别和符号观察。
+
+解析支持编号、十进制数、范围、尺寸和名称数量列表。空白、破折号与图形符号分别保存。地层编号中的圈码保留在编号中，数量列中的圈码另给待核查的数量解释。多级表头的单位归属、单元格缺失或重叠、面积超过布方尺寸乘积等情况写入问题列表。可疑的面积与深度表头混入情况，会按已匹配的物理单元格重新调用 PaddleOCR-VL，并保存整表候选和裁片候选。
+
+额外文本 LLM 建议保留为按需语义复核。确定性表头和几何规则负责常规恢复，PaddleOCR-VL 负责图像转录。文本 LLM 可辅助判断复杂表头角色、单位归属、数量圈码和脚注意义。接口采用受约束 JSON，要求引用真实 `cell_id` 和对应原文，建议交由审校操作应用。每次最多选取 80 个来源单元格，优先选表头和有问题的单元格，并补充前部数据行，响应报告实际抽样范围。默认全量重处理使用 OCR 和规则流程，语义复核由阅览器按钮单独触发。
+
+全量覆盖本机当前存在的已登记 PDF，可执行下面的命令。
+
+```powershell
+.venv/Scripts/python.exe scripts/reprocess_tables.py --output data/processed/benchmarks/tables-reprocessed-20261115
+```
+
+该流程逐页检测全部可用文献，随后识别检测出的数据表并按来源和结构证据处理续表。`--discover-only` 可单独完成检测。`--resume` 会校验已完成文献的全部原页图像和版面模型权重后复用检测结果。运行状态记录在 `progress.json`，逐页检测缓存位于 `discovery/`，最终清单为 `table-inventory.json`，各表导出位于 `exports/`，分类分歧汇总在 `classification-review.json`。中断后重复执行相同命令，已完成的检测页和 OCR 请求可复用。扫描范围及候选数量由运行报告给出，独立人工标注可用于进一步测量漏检和字符准确率。
 
 数据库新增 `graphic_runs/graphic_objects/graphic_fragments/graphic_cells`，不替换来源文字。未发布候选可以在暂存阅览器审校；默认正文 RAG 只排除已发布图表区域。新文献在入库前已把检测到的图表文字划入表格上下文。旧文献的已确认脚注不被删除。
 
 API 复核默认关闭，启用需传 `--allow-api-review`，配置文件仍放在用户配置目录之外部 `.env`。模型固定 `deepseek-flash`，最多 20 次请求且遵循总 token 预算，仅发送已识别单元格文字。输出必须引用已有原文；不发送整本报告，不假定视觉输入能力。`--skip-vl` 用于单独测量主流程，正式困难样本复核可省略此参数。
 
-## 独立标注与发布
+## 独立质量评估
 
 ```powershell
 .venv/Scripts/python.exe scripts/sample_graphics.py --run-dir data/processed/library/c92f5f329d8be223-40cf08553706 --output data/processed/benchmarks/graphics-60-annotations.json

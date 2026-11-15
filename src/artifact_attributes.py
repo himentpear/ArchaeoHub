@@ -16,6 +16,7 @@ from typing import Any
 from sqlalchemy import Text, cast, select, update
 
 from src.alto.parser import AltoIngestor
+from src.source_types import numbered_caption
 from src.db.models import (
     AltoBlock, Artifact, ArtifactAttributeCandidate as Candidate, Canvas,
     Manifest, ProvenanceAnchor, ReviewTask, Revision,
@@ -200,7 +201,7 @@ def collect_units(session, manifest_id: str) -> list[SpecimenUnit]:
             current = None
             context.clear()
             continue
-        caption_like = re.match(r"^\s*\d+[.．、]\s*[^（()\n]{1,60}[（(]", text)
+        caption_like = numbered_caption(text)
         if block.block_type == "caption" or canvas.page_domain == "plate" or caption_like:
             units.extend(_caption_units(text, block, canvas, by_code))
             # Figures interrupt prose on the same page; they do not redefine headings.
@@ -675,7 +676,7 @@ def run_model_attributes(engine, manifest_id, run_dir, *, settings_path=None,
     if max_units < 0:
         raise ValueError("max_units must be nonnegative")
     router = ModelRouter.from_settings(run_dir / "artifact_model_cache", load_settings(settings_path))
-    if router.local_model is None and not (router.allow_cloud and router.key):
+    if not getattr(router, "local_available", router.local_model is not None) and not (router.allow_cloud and router.key):
         return {"status": "unavailable", "processed": 0, "candidates_added": 0}
     if units is None:
         with get_session(engine) as session:
@@ -759,16 +760,23 @@ def run_model_attributes(engine, manifest_id, run_dir, *, settings_path=None,
 
 def export_attributes(session, manifest_id, run_dir):
     import csv
+    from src.artifact_identity import identity_state
+    from src.region_models import ArtifactImageRegion
+    from src.artifact_regions import region_state
     from src.ingest.page_pipeline import atomic_json
     manifest = session.get(Manifest, manifest_id)
     artifacts = list(session.scalars(select(Artifact).where(
         Artifact.work_id == manifest.work_id
     ).order_by(Artifact.artifact_no)))
+    regions = {}
+    for region in session.scalars(select(ArtifactImageRegion).join(Artifact).where(Artifact.work_id == manifest.work_id)):
+        regions.setdefault(region.artifact_id, []).append(region_state(region))
     atomic_json(run_dir / "artifacts.json", {
         "manifest_id": manifest_id, "version": VERSION,
         "notice": "Non-conflicting candidates may be projected into columns; inspect per-field review status.",
         "artifacts": [{
-            "id": a.id, "artifact_no": a.artifact_no,
+            "id": a.id, **identity_state(a),
+            "image_regions": regions.get(a.id, []),
             **{name: getattr(a, name) for name in FIELDS},
             "review_status": a.review_status,
             "attribute_workflow": (a.metadata_json or {}).get("attribute_workflow", {}),
@@ -803,6 +811,7 @@ def export_attributes(session, manifest_id, run_dir):
 
 
 def artifact_detail(session, artifact_id):
+    from src.artifact_identity import identity_state
     artifact = session.get(Artifact, artifact_id)
     if artifact is None:
         raise LookupError("Artifact not found")
@@ -822,7 +831,7 @@ def artifact_detail(session, artifact_id):
             "reviewer": row.reviewer, "review_note": row.review_note,
         })
     return {
-        "id": artifact.id, "artifact_no": artifact.artifact_no, "work_id": artifact.work_id,
+        "id": artifact.id, **identity_state(artifact), "work_id": artifact.work_id,
         "attributes": {name: getattr(artifact, name) for name in FIELDS},
         "review_status": artifact.review_status, "workflow": workflow,
         "artifact_revision": workflow.get("revision", 0), "candidates": candidates,

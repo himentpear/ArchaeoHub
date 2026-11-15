@@ -23,7 +23,7 @@ if __name__=='__main__':
         print(json.dumps({'models':len(lock),'verified':not mismatches,'errors':mismatches}))
         raise SystemExit(1 if mismatches else 0)
     from paddlex.inference.utils.official_models import official_models
-    names=['PP-DocLayout_plus-L','PP-DocLayout-S','PP-LCNet_x1_0_doc_ori','PP-LCNet_x1_0_table_cls','SLANet_plus',
+    names=['PP-DocLayoutV3','PP-DocLayout_plus-L','PP-DocLayout-S','PP-LCNet_x1_0_doc_ori','PP-LCNet_x1_0_table_cls','SLANet_plus',
         'SLANeXt_wired','SLANeXt_wireless','RT-DETR-L_wired_table_cell_det','RT-DETR-L_wireless_table_cell_det']
     if a.with_vl:names.append('PaddleOCR-VL-1.6-0.9B')
     result={}

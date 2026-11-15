@@ -3,11 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import queue
 import re
-import subprocess
-import sys
-import threading
 import time
 from pathlib import Path
 
@@ -18,9 +14,9 @@ from src.db.session import get_session
 from src.ingest.page_pipeline import atomic_json, file_hash, job_lock
 from src.settings import load_settings
 from src.toc_models import TocNodeProposal, TocStructureRun
+from src.model_api import OpenAIEndpoint
 
 VERSION = "local-toc-v2"
-ROOT = Path(__file__).resolve().parents[1]
 
 
 class TocSourceChanged(ValueError):
@@ -325,69 +321,24 @@ def hydrate_local_decisions(frame, targets, prior, answer, schema, allowed):
 
 
 class LocalTocModel:
-    """One local worker; timeouts terminate it and cannot trigger cloud calls."""
-    def __init__(self, model_path, run_dir, *, threads=4, timeout=150, context=8192, max_tokens=1400):
-        self.model_path, self.run_dir = model_path, run_dir
-        self.threads, self.timeout, self.context, self.max_tokens = threads, timeout, context, max_tokens
-        self.process = None
-        self.responses = queue.Queue()
-        self.log = None
-
-    def _start(self):
-        self.log = (self.run_dir / "toc_local_worker.log").open("a", encoding="utf-8")
-        self.process = subprocess.Popen(
-            [sys.executable, "-m", "src.toc_worker", "--model", str(self.model_path),
-             "--threads", str(self.threads), "--context", str(self.context),
-             "--max-tokens", str(self.max_tokens)],
-            cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.log,
-            text=True, encoding="utf-8",
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    """TOC adapter using the same independently deployed HTTP service."""
+    def __init__(self, model_path, run_dir, *, threads=4, timeout=150, context=8192,
+                 max_tokens=1400, settings=None):
+        settings = settings or {}
+        self.max_tokens = max_tokens
+        self.endpoint = OpenAIEndpoint(
+            settings.get("LOCAL_TOC_BASE_URL") or settings.get("LOCAL_LLM_BASE_URL") or "http://127.0.0.1:18081/v1",
+            settings.get("LOCAL_TOC_MODEL") or settings.get("LOCAL_LLM_MODEL") or (Path(model_path).name if model_path else "local-model"),
+            settings.get("LOCAL_TOC_API_KEY") or settings.get("LOCAL_LLM_API_KEY"),
+            settings.get("LOCAL_TOC_RESPONSE_FORMAT") or settings.get("LOCAL_LLM_RESPONSE_FORMAT", "json_schema"),
+            timeout=timeout,
         )
-        def read():
-            try:
-                for line in self.process.stdout:
-                    try:
-                        self.responses.put(json.loads(line))
-                    except json.JSONDecodeError:
-                        continue
-            finally:
-                self.responses.put({"error_type": "WorkerExited"})
-        threading.Thread(target=read, daemon=True).start()
 
     def infer(self, request_id, prompt, schema):
-        if self.process is None:
-            self._start()
-        self.process.stdin.write(json.dumps({
-            "request_id": request_id, "prompt": prompt, "schema": schema,
-        }, ensure_ascii=False) + "\n")
-        self.process.stdin.flush()
-        try:
-            reply = self.responses.get(timeout=self.timeout)
-        except queue.Empty:
-            self.close()
-            raise TimeoutError("Local TOC batch exceeded its time limit") from None
-        if reply.get("error_type"):
-            raise RuntimeError("Local TOC worker: " + reply["error_type"])
-        if reply.get("request_id") != request_id:
-            raise ValueError("Local TOC worker response mismatch")
-        return reply
+        return self.endpoint.infer(request_id, prompt, schema, max_tokens=self.max_tokens)
 
     def close(self):
-        if self.process is not None:
-            if self.process.poll() is None:
-                self.process.terminate()
-                try:
-                    self.process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    self.process.kill()
-                    self.process.wait(timeout=5)
-            for stream in (self.process.stdin, self.process.stdout):
-                if stream:
-                    stream.close()
-            self.process = None
-        if self.log:
-            self.log.close()
-            self.log = None
+        self.endpoint.close()
 
 
 def select_local_model(settings):
@@ -410,10 +361,13 @@ def run_local_toc_review(engine, manifest_id, run_dir, *, settings_path=None, mo
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
     settings = load_settings(settings_path)
+    if model_path is not None:
+        settings = {**settings, "LOCAL_TOC_MODEL": Path(model_path).name}
     if settings.get("LOCAL_TOC_ENABLED", "true").lower() == "false":
         return {"status": "disabled", "processed": 0}
     path = Path(model_path) if model_path else select_local_model(settings)
-    if path is None or not path.is_file():
+    api_configured = bool(settings.get("LOCAL_TOC_BASE_URL") or settings.get("LOCAL_LLM_BASE_URL"))
+    if not api_configured and (path is None or not path.is_file()):
         result = {"status": "unavailable", "processed": 0, "reason": "No local TOC model installed", "cloud_calls": 0}
         atomic_json(run_dir / "toc_model_stage.json", result)
         return result
@@ -434,7 +388,12 @@ def run_local_toc_review(engine, manifest_id, run_dir, *, settings_path=None, mo
             result = {"status": "no_candidates", "processed": 0, "total": len(frame["nodes"]), "cloud_calls": 0}
             atomic_json(run_dir / "toc_model_stage.json", result)
             return result
-        identity = {"name": path.name, "sha256": file_hash(path), "size": path.stat().st_size}
+        model_name = settings.get("LOCAL_TOC_MODEL") or settings.get("LOCAL_LLM_MODEL") or (path.name if path else "local-model")
+        identity = {"name": model_name,
+                    "endpoint": settings.get("LOCAL_TOC_BASE_URL") or settings.get("LOCAL_LLM_BASE_URL") or "http://127.0.0.1:18081/v1",
+                    "format": settings.get("LOCAL_TOC_RESPONSE_FORMAT") or settings.get("LOCAL_LLM_RESPONSE_FORMAT", "json_schema")}
+        if path and path.is_file():
+            identity.update(sha256=file_hash(path), size=path.stat().st_size)
         request_key = _hash([frame["source_digest"], identity, config])
         with get_session(engine) as session:
             run = session.scalar(select(TocStructureRun).where(TocStructureRun.request_key == request_key))
@@ -443,13 +402,13 @@ def run_local_toc_review(engine, manifest_id, run_dir, *, settings_path=None, mo
             if run is None:
                 run = TocStructureRun(
                     manifest_id=manifest_id, request_key=request_key, source_digest=frame["source_digest"],
-                    model_name=path.name, model_identity=identity, config_json=config,
+                    model_name=model_name, model_identity=identity, config_json=config,
                 )
                 session.add(run)
                 session.flush()
             run_id = run.id
         result = {
-            "id": run_id, "status": "running", "model": path.name, "model_identity": identity,
+            "id": run_id, "status": "running", "model": model_name, "model_identity": identity,
             "source_digest": frame["source_digest"], "total": len(frame["nodes"]),
             "eligible": eligible, "selected": len(targets), "processed": 0,
             "changes": 0, "excluded": 0, "added": 0, "reparented": 0,
@@ -460,6 +419,7 @@ def run_local_toc_review(engine, manifest_id, run_dir, *, settings_path=None, mo
         client = model_client or LocalTocModel(
             path, run_dir, threads=int(settings.get("LOCAL_MODEL_THREADS", "4")),
             timeout=int(settings.get("LOCAL_TOC_BATCH_TIMEOUT", "150")),
+            settings=settings,
         )
         prior = {}
         try:
